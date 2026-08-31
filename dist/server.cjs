@@ -5,6 +5,10 @@ var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
 var __getOwnPropNames = Object.getOwnPropertyNames;
 var __getProtoOf = Object.getPrototypeOf;
 var __hasOwnProp = Object.prototype.hasOwnProperty;
+var __export = (target, all) => {
+  for (var name in all)
+    __defProp(target, name, { get: all[name], enumerable: true });
+};
 var __copyProps = (to, from, except, desc) => {
   if (from && typeof from === "object" || typeof from === "function") {
     for (let key of __getOwnPropNames(from))
@@ -21,8 +25,15 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
   isNodeMode || !mod || !mod.__esModule ? __defProp(target, "default", { value: mod, enumerable: true }) : target,
   mod
 ));
+var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 
 // server.ts
+var server_exports = {};
+__export(server_exports, {
+  app: () => app,
+  default: () => server_default
+});
+module.exports = __toCommonJS(server_exports);
 var dotenv = __toESM(require("dotenv"), 1);
 var import_cloudinary = require("cloudinary");
 var import_express = __toESM(require("express"), 1);
@@ -305,132 +316,187 @@ async function handleOrderSubmission(order, baseUrl) {
     };
   }
 }
-async function startServer() {
-  const app = (0, import_express.default)();
-  const PORT = 3e3;
-  app.use(import_express.default.json({ limit: "150mb" }));
-  app.use(import_express.default.urlencoded({ limit: "150mb", extended: true }));
-  app.use("/uploads", import_express.default.static(UPLOADS_DIR));
-  app.get("/api/health", (req, res) => {
-    res.json({
-      status: "ok",
-      smtpUser: SMTP_CONFIG.user,
-      targetEmails: TARGET_EMAILS,
-      uploadsDir: UPLOADS_DIR
-    });
-  });
-  function getCloudinary() {
-    if (!process.env.CLOUDINARY_CLOUD_NAME || !process.env.CLOUDINARY_API_KEY || !process.env.CLOUDINARY_API_SECRET) {
-      throw new Error("B\u1EA1n c\u1EA7n c\u1EA5u h\xECnh CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET trong bi\u1EBFn m\xF4i tr\u01B0\u1EDDng (File .env) \u0111\u1EC3 l\u01B0u file tr\xEAn Vercel.");
-    }
-    import_cloudinary.v2.config({
-      cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-      api_key: process.env.CLOUDINARY_API_KEY,
-      api_secret: process.env.CLOUDINARY_API_SECRET
-    });
-    return import_cloudinary.v2;
+var app = (0, import_express.default)();
+var PORT = 3e3;
+app.use((req, res, next) => {
+  res.header("Access-Control-Allow-Origin", "*");
+  res.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+  res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept, Authorization");
+  if (req.method === "OPTIONS") {
+    return res.sendStatus(200);
   }
-  app.post("/api/order/init", (req, res) => {
-    const { customerName = "Khach" } = req.body;
-    const sanitizedName = customerName.toLowerCase().replace(/[^a-z0-9]/gi, "-").replace(/-+/g, "-");
+  next();
+});
+app.use(import_express.default.json({ limit: "150mb" }));
+app.use(import_express.default.urlencoded({ limit: "150mb", extended: true }));
+app.use("/uploads", import_express.default.static(UPLOADS_DIR));
+function getCloudinary() {
+  if (!process.env.CLOUDINARY_CLOUD_NAME || !process.env.CLOUDINARY_API_KEY || !process.env.CLOUDINARY_API_SECRET) {
+    throw new Error("B\u1EA1n c\u1EA7n c\u1EA5u h\xECnh CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET trong bi\u1EBFn m\xF4i tr\u01B0\u1EDDng (Environment Variables) tr\xEAn Vercel \u0111\u1EC3 l\u01B0u file \u1EA3nh.");
+  }
+  import_cloudinary.v2.config({
+    cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+    api_key: process.env.CLOUDINARY_API_KEY,
+    api_secret: process.env.CLOUDINARY_API_SECRET
+  });
+  return import_cloudinary.v2;
+}
+app.get("/api/health", (req, res) => {
+  res.json({
+    status: "ok",
+    smtpUser: SMTP_CONFIG.user,
+    targetEmails: TARGET_EMAILS,
+    uploadsDir: UPLOADS_DIR,
+    cloudinaryConfigured: !!(process.env.CLOUDINARY_CLOUD_NAME && process.env.CLOUDINARY_API_KEY && process.env.CLOUDINARY_API_SECRET)
+  });
+});
+app.post("/api/order/init", (req, res) => {
+  try {
+    const { customerName = "Khach" } = req.body || {};
+    const sanitizedName = String(customerName).toLowerCase().replace(/[^a-z0-9]/gi, "-").replace(/-+/g, "-");
     const timestamp = Date.now();
     const orderId = `${sanitizedName}_${timestamp}`;
     res.json({ success: true, projectFolder: orderId });
-  });
-  app.post("/api/order/upload-page", async (req, res) => {
-    try {
-      const { projectFolder, pageNumber, dataUrl } = req.body;
-      if (!projectFolder || !dataUrl) return res.status(400).json({ error: "Missing data" });
-      const cld = getCloudinary();
-      const fileName = `Trang_${String(pageNumber).padStart(2, "0")}`;
-      const folderPath = `photobook_orders/${projectFolder}`;
-      const result = await cld.uploader.upload(dataUrl, {
-        folder: folderPath,
-        public_id: fileName,
-        resource_type: "image"
-      });
-      res.json({ success: true, fileName, url: result.secure_url });
-    } catch (err) {
-      console.error("[Cloudinary Upload Error]", err);
-      res.status(500).json({ error: err.message || "L\u1ED7i l\u01B0u tr\u1EEF \u1EA3nh" });
-    }
-  });
-  app.post("/api/order/finalize", async (req, res) => {
-    try {
-      const { projectFolder, orderData, uploadedPages } = req.body;
-      if (!projectFolder) return res.status(400).json({ error: "Invalid projectFolder" });
-      const protocol = req.headers["x-forwarded-proto"] || req.protocol;
-      const host = req.headers["x-forwarded-host"] || req.get("host");
-      const savedSpreads = (uploadedPages || []).map((p) => ({
-        name: `Trang_${String(p.pageNumber).padStart(2, "0")}.jpg`,
-        pageNumber: p.pageNumber,
-        downloadUrl: p.url
-      })).sort((a, b) => a.pageNumber - b.pageNumber);
-      const { subject, html, text } = generateOrderEmailHtml(orderData, savedSpreads, `Cloudinary ID: ${projectFolder}`);
-      const targetEmailStr = TARGET_EMAILS.join(", ");
-      const transporter = import_nodemailer.default.createTransport({
-        host: SMTP_CONFIG.host,
-        port: SMTP_CONFIG.port,
-        secure: SMTP_CONFIG.secure,
-        auth: { user: SMTP_CONFIG.user, pass: SMTP_CONFIG.pass }
-      });
-      const mailOptions = {
-        from: `"PTBVN Album Builder" <${SMTP_CONFIG.user}>`,
-        to: TARGET_EMAILS,
-        replyTo: orderData.customerDetails?.email || orderData.customerEmail || void 0,
-        subject,
-        text,
-        html
-      };
-      const info = await transporter.sendMail(mailOptions);
-      console.log("[SMTP Gmail Success] Order finalized and email sent! MessageId:", info.messageId);
-      res.json({
-        success: true,
-        project_folder: projectFolder,
-        files: savedSpreads,
-        targetEmail: targetEmailStr
-      });
-    } catch (err) {
-      console.error("[Finalize Error]", err);
-      res.status(500).json({
+  } catch (err) {
+    console.error("[Order Init Error]", err);
+    res.status(500).json({ success: false, error: err.message || "L\u1ED7i kh\u1EDFi t\u1EA1o \u0111\u01A1n h\xE0ng" });
+  }
+});
+app.post("/api/order/sign-upload", (req, res) => {
+  try {
+    const { folder, public_id } = req.body || {};
+    const timestamp = Math.round((/* @__PURE__ */ new Date()).getTime() / 1e3);
+    if (!process.env.CLOUDINARY_CLOUD_NAME || !process.env.CLOUDINARY_API_KEY || !process.env.CLOUDINARY_API_SECRET) {
+      return res.status(400).json({
         success: false,
-        error: err.message
+        error: "Ch\u01B0a c\u1EA5u h\xECnh bi\u1EBFn m\xF4i tr\u01B0\u1EDDng CLOUDINARY tr\xEAn Vercel (CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET)."
       });
     }
-  });
-  app.post("/api/order/submit", async (req, res) => {
-    const orderData = req.body;
-    console.log("=== [NH\u1EACN \u0110\u01A0N \u0110\u1EB6T IN ALBUM M\u1EDAI] === Kh\xE1ch:", orderData.customerDetails?.fullName || orderData.customerName, "S\u0110T:", orderData.customerDetails?.phone || orderData.customerPhone);
-    const protocol = req.headers["x-forwarded-proto"] || req.protocol;
-    const host = req.headers["x-forwarded-host"] || req.get("host");
-    const baseUrl = `${protocol}://${host}`;
-    const result = await handleOrderSubmission(orderData, baseUrl);
+    const cld = getCloudinary();
+    const paramsToSign = {
+      timestamp
+    };
+    if (folder) paramsToSign.folder = folder;
+    if (public_id) paramsToSign.public_id = public_id;
+    const signature = cld.utils.api_sign_request(paramsToSign, process.env.CLOUDINARY_API_SECRET);
     res.json({
-      status: result.success ? "success" : "saved_with_email_warning",
-      success: result.success,
-      message: result.success ? "Project submitted successfully." : "Saved project to server.",
-      project_folder: result.projectFolder,
-      files: result.savedFiles,
-      targetEmail: result.targetEmail,
-      error: result.error
+      success: true,
+      signature,
+      timestamp,
+      apiKey: process.env.CLOUDINARY_API_KEY,
+      cloudName: process.env.CLOUDINARY_CLOUD_NAME,
+      folder,
+      public_id
     });
+  } catch (err) {
+    console.error("[Sign Upload Error]", err);
+    res.status(500).json({ success: false, error: err.message || "L\u1ED7i t\u1EA1o ch\u1EEF k\xFD Cloudinary" });
+  }
+});
+app.post("/api/order/upload-page", async (req, res) => {
+  try {
+    const { projectFolder, pageNumber, dataUrl } = req.body || {};
+    if (!projectFolder || !dataUrl) {
+      return res.status(400).json({ success: false, error: "Thi\u1EBFu th\xF4ng tin projectFolder ho\u1EB7c dataUrl" });
+    }
+    const cld = getCloudinary();
+    const fileName = `Trang_${String(pageNumber || 1).padStart(2, "0")}`;
+    const folderPath = `photobook_orders/${projectFolder}`;
+    const result = await cld.uploader.upload(dataUrl, {
+      folder: folderPath,
+      public_id: fileName,
+      resource_type: "image"
+    });
+    res.json({ success: true, fileName, url: result.secure_url });
+  } catch (err) {
+    console.error("[Cloudinary Upload Error]", err);
+    res.status(500).json({ success: false, error: err.message || "L\u1ED7i l\u01B0u tr\u1EEF \u1EA3nh l\xEAn Cloudinary" });
+  }
+});
+app.post("/api/order/finalize", async (req, res) => {
+  try {
+    const { projectFolder, orderData, uploadedPages } = req.body || {};
+    if (!projectFolder) {
+      return res.status(400).json({ success: false, error: "Thi\u1EBFu th\xF4ng tin projectFolder" });
+    }
+    const savedSpreads = (uploadedPages || []).map((p) => ({
+      name: `Trang_${String(p.pageNumber || 1).padStart(2, "0")}.jpg`,
+      pageNumber: p.pageNumber,
+      downloadUrl: p.url
+    })).sort((a, b) => a.pageNumber - b.pageNumber);
+    const { subject, html, text } = generateOrderEmailHtml(orderData || {}, savedSpreads, `Cloudinary Folder: photobook_orders/${projectFolder}`);
+    const targetEmailStr = TARGET_EMAILS.join(", ");
+    const transporter = import_nodemailer.default.createTransport({
+      host: SMTP_CONFIG.host,
+      port: SMTP_CONFIG.port,
+      secure: SMTP_CONFIG.secure,
+      auth: { user: SMTP_CONFIG.user, pass: SMTP_CONFIG.pass }
+    });
+    const mailOptions = {
+      from: `"PTBVN Album Builder" <${SMTP_CONFIG.user}>`,
+      to: TARGET_EMAILS,
+      replyTo: orderData?.customerDetails?.email || orderData?.customerEmail || void 0,
+      subject,
+      text,
+      html
+    };
+    const info = await transporter.sendMail(mailOptions);
+    console.log("[SMTP Gmail Success] Order finalized and email sent! MessageId:", info.messageId);
+    res.json({
+      success: true,
+      project_folder: projectFolder,
+      files: savedSpreads,
+      targetEmail: targetEmailStr
+    });
+  } catch (err) {
+    console.error("[Finalize Error]", err);
+    res.status(500).json({
+      success: false,
+      error: err.message || "L\u1ED7i g\u1EEDi email th\xF4ng b\xE1o \u0111\u01A1n h\xE0ng"
+    });
+  }
+});
+app.post("/api/order/submit", async (req, res) => {
+  const orderData = req.body;
+  console.log("=== [NH\u1EACN \u0110\u01A0N \u0110\u1EB6T IN ALBUM M\u1EDAI] === Kh\xE1ch:", orderData.customerDetails?.fullName || orderData.customerName, "S\u0110T:", orderData.customerDetails?.phone || orderData.customerPhone);
+  const protocol = req.headers["x-forwarded-proto"] || req.protocol;
+  const host = req.headers["x-forwarded-host"] || req.get("host");
+  const baseUrl = `${protocol}://${host}`;
+  const result = await handleOrderSubmission(orderData, baseUrl);
+  res.json({
+    status: result.success ? "success" : "saved_with_email_warning",
+    success: result.success,
+    message: result.success ? "Project submitted successfully." : "Saved project to server.",
+    project_folder: result.projectFolder,
+    files: result.savedFiles,
+    targetEmail: result.targetEmail,
+    error: result.error
   });
+});
+async function startServer() {
   if (process.env.NODE_ENV !== "production") {
     const vite = await (0, import_vite.createServer)({
       server: { middlewareMode: true },
       appType: "spa"
     });
     app.use(vite.middlewares);
-  } else {
+  } else if (!process.env.VERCEL) {
     const distPath = import_path.default.join(process.cwd(), "dist");
     app.use(import_express.default.static(distPath));
     app.get("*", (req, res) => {
       res.sendFile(import_path.default.join(distPath, "index.html"));
     });
   }
-  app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Server running on http://localhost:${PORT}`);
-  });
+  if (!process.env.VERCEL) {
+    app.listen(PORT, "0.0.0.0", () => {
+      console.log(`Server running on http://localhost:${PORT}`);
+    });
+  }
 }
 startServer();
+var server_default = app;
+// Annotate the CommonJS export names for ESM import in node:
+0 && (module.exports = {
+  app
+});
 //# sourceMappingURL=server.cjs.map

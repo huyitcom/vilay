@@ -122,16 +122,29 @@ export const OrderPrintModal: React.FC<OrderPrintModalProps> = ({
     setSubmitProgressPercent(5);
     setSubmitProgressMsg('Đang khởi tạo thư mục dự án...');
 
+    let isSuccess = false;
+
     try {
       const initRes = await fetch('/api/order/init', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ customerName: customerName.trim() || 'Khách hàng' })
       });
-      const initData = await initRes.json();
       
-      if (!initRes.ok || !initData.projectFolder) {
-        throw new Error('Không thể khởi tạo thư mục lưu trữ.');
+      const initText = await initRes.text();
+      let initData: any;
+      try {
+        initData = JSON.parse(initText);
+      } catch {
+        throw new Error(
+          initRes.ok
+            ? 'Phản hồi từ máy chủ không hợp lệ.'
+            : `Không thể kết nối đến API (/api/order/init - mã lỗi ${initRes.status}). Vui lòng kiểm tra lại triển khai serverless trên Vercel.`
+        );
+      }
+      
+      if (!initRes.ok || !initData?.projectFolder) {
+        throw new Error(initData?.error || 'Không thể khởi tạo thư mục lưu trữ.');
       }
       
       const projectFolder = initData.projectFolder;
@@ -147,7 +160,7 @@ export const OrderPrintModal: React.FC<OrderPrintModalProps> = ({
           setSubmitProgressMsg(msg);
         });
         
-        if (!uploadResult) {
+        if (!uploadResult || uploadResult.length === 0) {
            throw new Error('Lỗi trong quá trình kết xuất và tải trang lên Cloudinary.');
         }
         uploadedPages = uploadResult;
@@ -165,9 +178,17 @@ export const OrderPrintModal: React.FC<OrderPrintModalProps> = ({
               dataUrl: singleDataUrl
             })
           });
-          const uploadData = await uploadRes.json();
+          const uploadText = await uploadRes.text();
+          let uploadData: any;
+          try {
+            uploadData = JSON.parse(uploadText);
+          } catch {
+            throw new Error(`Lỗi máy chủ khi tải ảnh lên (${uploadRes.status})`);
+          }
           if (uploadRes.ok && uploadData.success) {
             uploadedPages.push({ pageNumber: 1, url: uploadData.url });
+          } else {
+            throw new Error(uploadData.error || 'Lỗi tải trang đơn');
           }
         }
       }
@@ -202,26 +223,36 @@ export const OrderPrintModal: React.FC<OrderPrintModalProps> = ({
         body: JSON.stringify({ projectFolder, orderData, uploadedPages }),
       });
       
-      if (!finalizeRes.ok) {
-         console.warn('Lỗi khi gửi email thông báo từ máy chủ.');
+      const finalizeText = await finalizeRes.text();
+      let finalizeData: any;
+      try {
+        finalizeData = JSON.parse(finalizeText);
+      } catch {
+        console.warn('Phản hồi finalize:', finalizeText);
       }
-      
+
+      if (!finalizeRes.ok) {
+        console.warn('Cảnh báo email thông báo:', finalizeData?.error || 'Lỗi gửi email');
+      }
+
+      isSuccess = true;
     } catch (err) {
       console.error('Error submitting order:', err);
       alert('Đã xảy ra lỗi khi gửi đơn hàng: ' + (err as Error).message);
     } finally {
       setSubmitProgressPercent(100);
       setIsSubmitting(false);
-      setIsSubmitted(true);
-
-      // Trigger confetti celebration
-      try {
-        confetti({
-          particleCount: 90,
-          spread: 75,
-          origin: { y: 0.6 },
-        });
-      } catch (_) {}
+      if (isSuccess) {
+        setIsSubmitted(true);
+        // Trigger confetti celebration
+        try {
+          confetti({
+            particleCount: 90,
+            spread: 75,
+            origin: { y: 0.6 },
+          });
+        } catch (_) {}
+      }
     }
   };
 

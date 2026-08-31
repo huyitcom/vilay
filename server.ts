@@ -364,34 +364,31 @@ async function handleOrderSubmission(
   }
 }
 
-async function startServer() {
-  const app = express();
-  const PORT = 3000;
+export const app = express();
+const PORT = 3000;
 
-  // Support large payload for multiple 300DPI spreads
-  app.use(express.json({ limit: '150mb' }));
-  app.use(express.urlencoded({ limit: '150mb', extended: true }));
+// CORS Support for seamless API communication
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(200);
+  }
+  next();
+});
 
-  // Static directory for uploaded master print files
-  app.use('/uploads', express.static(UPLOADS_DIR));
+// Support large payload for multiple 300DPI spreads
+app.use(express.json({ limit: '150mb' }));
+app.use(express.urlencoded({ limit: '150mb', extended: true }));
 
-  // API Health Check
-  app.get('/api/health', (req, res) => {
-    res.json({
-      status: 'ok',
-      smtpUser: SMTP_CONFIG.user,
-      targetEmails: TARGET_EMAILS,
-      uploadsDir: UPLOADS_DIR,
-    });
-  });
+// Static directory for uploaded master print files
+app.use('/uploads', express.static(UPLOADS_DIR));
 
-  // API: Submit multi-page album order
-  
-  
 // Helper: Cloudinary Initialization
 function getCloudinary() {
   if (!process.env.CLOUDINARY_CLOUD_NAME || !process.env.CLOUDINARY_API_KEY || !process.env.CLOUDINARY_API_SECRET) {
-    throw new Error('Bạn cần cấu hình CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET trong biến môi trường (File .env) để lưu file trên Vercel.');
+    throw new Error('Bạn cần cấu hình CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET trong biến môi trường (Environment Variables) trên Vercel để lưu file ảnh.');
   }
   cloudinary.config({
     cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
@@ -401,113 +398,168 @@ function getCloudinary() {
   return cloudinary;
 }
 
-  // API: Initialize order project folder
-  app.post('/api/order/init', (req, res) => {
-    const { customerName = 'Khach' } = req.body;
-    const sanitizedName = customerName.toLowerCase().replace(/[^a-z0-9]/gi, '-').replace(/-+/g, '-');
+// API Health Check
+app.get('/api/health', (req, res) => {
+  res.json({
+    status: 'ok',
+    smtpUser: SMTP_CONFIG.user,
+    targetEmails: TARGET_EMAILS,
+    uploadsDir: UPLOADS_DIR,
+    cloudinaryConfigured: !!(process.env.CLOUDINARY_CLOUD_NAME && process.env.CLOUDINARY_API_KEY && process.env.CLOUDINARY_API_SECRET),
+  });
+});
+
+// API: Initialize order project folder
+app.post('/api/order/init', (req, res) => {
+  try {
+    const { customerName = 'Khach' } = req.body || {};
+    const sanitizedName = String(customerName).toLowerCase().replace(/[^a-z0-9]/gi, '-').replace(/-+/g, '-');
     const timestamp = Date.now();
     const orderId = `${sanitizedName}_${timestamp}`;
     res.json({ success: true, projectFolder: orderId });
-  });
+  } catch (err: any) {
+    console.error('[Order Init Error]', err);
+    res.status(500).json({ success: false, error: err.message || 'Lỗi khởi tạo đơn hàng' });
+  }
+});
 
-  // API: Upload a single page to Cloudinary
-  app.post('/api/order/upload-page', async (req, res) => {
-    try {
-      const { projectFolder, pageNumber, dataUrl } = req.body;
-      if (!projectFolder || !dataUrl) return res.status(400).json({error: 'Missing data'});
+// API: Generate signature for direct client-to-Cloudinary upload (bypasses Vercel 4.5MB payload limit)
+app.post('/api/order/sign-upload', (req, res) => {
+  try {
+    const { folder, public_id } = req.body || {};
+    const timestamp = Math.round(new Date().getTime() / 1000);
 
-      const cld = getCloudinary();
-      const fileName = `Trang_${String(pageNumber).padStart(2, '0')}`;
-      const folderPath = `photobook_orders/${projectFolder}`;
-
-      const result = await cld.uploader.upload(dataUrl, {
-        folder: folderPath,
-        public_id: fileName,
-        resource_type: 'image'
-      });
-
-      res.json({ success: true, fileName, url: result.secure_url });
-    } catch (err) {
-      console.error('[Cloudinary Upload Error]', err);
-      res.status(500).json({ error: err.message || 'Lỗi lưu trữ ảnh' });
-    }
-  });
-
-  // API: Finalize order and send email
-  app.post('/api/order/finalize', async (req, res) => {
-    try {
-      const { projectFolder, orderData, uploadedPages } = req.body;
-      if (!projectFolder) return res.status(400).json({error: 'Invalid projectFolder'});
-
-      const protocol = req.headers['x-forwarded-proto'] || req.protocol;
-      const host = req.headers['x-forwarded-host'] || req.get('host');
-
-      // 1. Format pages for email
-      const savedSpreads = (uploadedPages || []).map(p => ({
-        name: `Trang_${String(p.pageNumber).padStart(2, '0')}.jpg`,
-        pageNumber: p.pageNumber,
-        downloadUrl: p.url
-      })).sort((a, b) => a.pageNumber - b.pageNumber);
-
-      // 2. Send Email
-      const { subject, html, text } = generateOrderEmailHtml(orderData, savedSpreads, `Cloudinary ID: ${projectFolder}`);
-      const targetEmailStr = TARGET_EMAILS.join(', ');
-
-      const transporter = nodemailer.createTransport({
-        host: SMTP_CONFIG.host,
-        port: SMTP_CONFIG.port,
-        secure: SMTP_CONFIG.secure,
-        auth: { user: SMTP_CONFIG.user, pass: SMTP_CONFIG.pass },
-      });
-
-      const mailOptions = {
-        from: `"PTBVN Album Builder" <${SMTP_CONFIG.user}>`,
-        to: TARGET_EMAILS,
-        replyTo: orderData.customerDetails?.email || orderData.customerEmail || undefined,
-        subject: subject,
-        text: text,
-        html: html,
-      };
-
-      const info = await transporter.sendMail(mailOptions);
-      console.log('[SMTP Gmail Success] Order finalized and email sent! MessageId:', info.messageId);
-
-      res.json({
-        success: true,
-        project_folder: projectFolder,
-        files: savedSpreads,
-        targetEmail: targetEmailStr,
-      });
-    } catch (err) {
-      console.error('[Finalize Error]', err);
-      res.status(500).json({
+    if (!process.env.CLOUDINARY_CLOUD_NAME || !process.env.CLOUDINARY_API_KEY || !process.env.CLOUDINARY_API_SECRET) {
+      return res.status(400).json({
         success: false,
-        error: err.message
+        error: 'Chưa cấu hình biến môi trường CLOUDINARY trên Vercel (CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET).'
       });
     }
-  });
 
-  app.post('/api/order/submit', async (req, res) => {
-    const orderData: OrderPayload = req.body;
-    console.log('=== [NHẬN ĐƠN ĐẶT IN ALBUM MỚI] === Khách:', orderData.customerDetails?.fullName || orderData.customerName, 'SĐT:', orderData.customerDetails?.phone || orderData.customerPhone);
+    const cld = getCloudinary();
+    const paramsToSign: Record<string, any> = {
+      timestamp: timestamp,
+    };
+    if (folder) paramsToSign.folder = folder;
+    if (public_id) paramsToSign.public_id = public_id;
 
-    const protocol = req.headers['x-forwarded-proto'] || req.protocol;
-    const host = req.headers['x-forwarded-host'] || req.get('host');
-    const baseUrl = `${protocol}://${host}`;
-
-    const result = await handleOrderSubmission(orderData, baseUrl);
+    const signature = cld.utils.api_sign_request(paramsToSign, process.env.CLOUDINARY_API_SECRET!);
 
     res.json({
-      status: result.success ? 'success' : 'saved_with_email_warning',
-      success: result.success,
-      message: result.success ? 'Project submitted successfully.' : 'Saved project to server.',
-      project_folder: result.projectFolder,
-      files: result.savedFiles,
-      targetEmail: result.targetEmail,
-      error: result.error,
+      success: true,
+      signature,
+      timestamp,
+      apiKey: process.env.CLOUDINARY_API_KEY,
+      cloudName: process.env.CLOUDINARY_CLOUD_NAME,
+      folder,
+      public_id
     });
-  });
+  } catch (err: any) {
+    console.error('[Sign Upload Error]', err);
+    res.status(500).json({ success: false, error: err.message || 'Lỗi tạo chữ ký Cloudinary' });
+  }
+});
 
+// API: Upload a single page to Cloudinary via server fallback
+app.post('/api/order/upload-page', async (req, res) => {
+  try {
+    const { projectFolder, pageNumber, dataUrl } = req.body || {};
+    if (!projectFolder || !dataUrl) {
+      return res.status(400).json({ success: false, error: 'Thiếu thông tin projectFolder hoặc dataUrl' });
+    }
+
+    const cld = getCloudinary();
+    const fileName = `Trang_${String(pageNumber || 1).padStart(2, '0')}`;
+    const folderPath = `photobook_orders/${projectFolder}`;
+
+    const result = await cld.uploader.upload(dataUrl, {
+      folder: folderPath,
+      public_id: fileName,
+      resource_type: 'image'
+    });
+
+    res.json({ success: true, fileName, url: result.secure_url });
+  } catch (err: any) {
+    console.error('[Cloudinary Upload Error]', err);
+    res.status(500).json({ success: false, error: err.message || 'Lỗi lưu trữ ảnh lên Cloudinary' });
+  }
+});
+
+// API: Finalize order and send email
+app.post('/api/order/finalize', async (req, res) => {
+  try {
+    const { projectFolder, orderData, uploadedPages } = req.body || {};
+    if (!projectFolder) {
+      return res.status(400).json({ success: false, error: 'Thiếu thông tin projectFolder' });
+    }
+
+    // 1. Format pages for email
+    const savedSpreads = (uploadedPages || []).map((p: any) => ({
+      name: `Trang_${String(p.pageNumber || 1).padStart(2, '0')}.jpg`,
+      pageNumber: p.pageNumber,
+      downloadUrl: p.url
+    })).sort((a: any, b: any) => a.pageNumber - b.pageNumber);
+
+    // 2. Send Email
+    const { subject, html, text } = generateOrderEmailHtml(orderData || {}, savedSpreads, `Cloudinary Folder: photobook_orders/${projectFolder}`);
+    const targetEmailStr = TARGET_EMAILS.join(', ');
+
+    const transporter = nodemailer.createTransport({
+      host: SMTP_CONFIG.host,
+      port: SMTP_CONFIG.port,
+      secure: SMTP_CONFIG.secure,
+      auth: { user: SMTP_CONFIG.user, pass: SMTP_CONFIG.pass },
+    });
+
+    const mailOptions = {
+      from: `"PTBVN Album Builder" <${SMTP_CONFIG.user}>`,
+      to: TARGET_EMAILS,
+      replyTo: orderData?.customerDetails?.email || orderData?.customerEmail || undefined,
+      subject: subject,
+      text: text,
+      html: html,
+    };
+
+    const info = await transporter.sendMail(mailOptions);
+    console.log('[SMTP Gmail Success] Order finalized and email sent! MessageId:', info.messageId);
+
+    res.json({
+      success: true,
+      project_folder: projectFolder,
+      files: savedSpreads,
+      targetEmail: targetEmailStr,
+    });
+  } catch (err: any) {
+    console.error('[Finalize Error]', err);
+    res.status(500).json({
+      success: false,
+      error: err.message || 'Lỗi gửi email thông báo đơn hàng'
+    });
+  }
+});
+
+app.post('/api/order/submit', async (req, res) => {
+  const orderData: OrderPayload = req.body;
+  console.log('=== [NHẬN ĐƠN ĐẶT IN ALBUM MỚI] === Khách:', orderData.customerDetails?.fullName || orderData.customerName, 'SĐT:', orderData.customerDetails?.phone || orderData.customerPhone);
+
+  const protocol = req.headers['x-forwarded-proto'] || req.protocol;
+  const host = req.headers['x-forwarded-host'] || req.get('host');
+  const baseUrl = `${protocol}://${host}`;
+
+  const result = await handleOrderSubmission(orderData, baseUrl);
+
+  res.json({
+    status: result.success ? 'success' : 'saved_with_email_warning',
+    success: result.success,
+    message: result.success ? 'Project submitted successfully.' : 'Saved project to server.',
+    project_folder: result.projectFolder,
+    files: result.savedFiles,
+    targetEmail: result.targetEmail,
+    error: result.error,
+  });
+});
+
+async function startServer() {
   // Vite middleware for development
   if (process.env.NODE_ENV !== 'production') {
     const vite = await createViteServer({
@@ -515,7 +567,7 @@ function getCloudinary() {
       appType: 'spa',
     });
     app.use(vite.middlewares);
-  } else {
+  } else if (!process.env.VERCEL) {
     const distPath = path.join(process.cwd(), 'dist');
     app.use(express.static(distPath));
     app.get('*', (req, res) => {
@@ -523,9 +575,15 @@ function getCloudinary() {
     });
   }
 
-  app.listen(PORT, '0.0.0.0', () => {
-    console.log(`Server running on http://localhost:${PORT}`);
-  });
+  // Only bind port when not running on Vercel Serverless
+  if (!process.env.VERCEL) {
+    app.listen(PORT, '0.0.0.0', () => {
+      console.log(`Server running on http://localhost:${PORT}`);
+    });
+  }
 }
 
 startServer();
+
+export default app;
+

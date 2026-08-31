@@ -467,26 +467,88 @@ export default function App() {
           onProgress(i + 1, pages.length, `Đang lưu trữ trang ${i + 1} lên hệ thống...`);
         }
 
-        // Upload immediately to release memory
-        const uploadRes = await fetch('/api/order/upload-page', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            projectFolder,
-            pageNumber: i + 1,
-            dataUrl: finalUrl
-          })
-        });
+        // Upload directly to Cloudinary or fallback to server
+        let uploadedPageUrl: string | null = null;
 
-        const uploadData = await uploadRes.json();
-        if (!uploadRes.ok || !uploadData.success) {
-           throw new Error(uploadData.error || 'Upload failed for page ' + (i + 1));
+        // Try direct signed Cloudinary upload first (bypasses Vercel 4.5MB payload limit)
+        try {
+          const fileName = `Trang_${String(i + 1).padStart(2, '0')}`;
+          const signRes = await fetch('/api/order/sign-upload', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              folder: `photobook_orders/${projectFolder}`,
+              public_id: fileName,
+            }),
+          });
+
+          const signText = await signRes.text();
+          let signData: any = {};
+          try {
+            signData = JSON.parse(signText);
+          } catch {
+            signData = {};
+          }
+
+          if (signRes.ok && signData.success && signData.signature && signData.cloudName) {
+            const formData = new FormData();
+            formData.append('file', finalUrl);
+            formData.append('api_key', signData.apiKey);
+            formData.append('timestamp', String(signData.timestamp));
+            formData.append('signature', signData.signature);
+            if (signData.folder) formData.append('folder', signData.folder);
+            if (signData.public_id) formData.append('public_id', signData.public_id);
+
+            const cldRes = await fetch(`https://api.cloudinary.com/v1_1/${signData.cloudName}/image/upload`, {
+              method: 'POST',
+              body: formData,
+            });
+
+            const cldData = await cldRes.json();
+            if (cldRes.ok && cldData.secure_url) {
+              uploadedPageUrl = cldData.secure_url;
+            } else {
+              console.warn('[Cloudinary Direct Upload Warning]', cldData);
+            }
+          }
+        } catch (directErr) {
+          console.warn('[Direct Cloudinary Upload Bypass Failed, trying server proxy]:', directErr);
         }
-        uploadedPages.push({ pageNumber: i + 1, url: uploadData.url });
+
+        // Fallback to server proxy upload if direct upload wasn't used
+        if (!uploadedPageUrl) {
+          const uploadRes = await fetch('/api/order/upload-page', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              projectFolder,
+              pageNumber: i + 1,
+              dataUrl: finalUrl
+            })
+          });
+
+          const uploadText = await uploadRes.text();
+          let uploadData: any;
+          try {
+            uploadData = JSON.parse(uploadText);
+          } catch {
+            throw new Error(`Lỗi máy chủ (${uploadRes.status}): Vui lòng kiểm tra biến môi trường Cloudinary trên Vercel.`);
+          }
+
+          if (!uploadRes.ok || !uploadData.success || !uploadData.url) {
+            throw new Error(uploadData?.error || 'Upload failed for page ' + (i + 1));
+          }
+          uploadedPageUrl = uploadData.url;
+        }
+
+        if (uploadedPageUrl) {
+          uploadedPages.push({ pageNumber: i + 1, url: uploadedPageUrl });
+        }
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error batch exporting and uploading pages for order:', err);
       success = false;
+      throw err; // Re-throw to be caught with clear message in modal
     } finally {
       setActivePageIndex(savedIndex);
       setIsExporting(false);
