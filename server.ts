@@ -43,8 +43,12 @@ interface OrderPayload {
 
 // Ensure uploads folder exists
 const UPLOADS_DIR = path.join(process.cwd(), 'uploads');
-if (!fs.existsSync(UPLOADS_DIR)) {
-  fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+try {
+  if (!process.env.VERCEL && !fs.existsSync(UPLOADS_DIR)) {
+    fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+  }
+} catch (e) {
+  console.warn('Could not create uploads directory (expected on Vercel):', e);
 }
 
 // SMTP Configuration from Photobook Vietnam
@@ -254,8 +258,14 @@ async function handleOrderSubmission(
   
   const relativeProjectFolder = `uploads/${dateFolder}/${sanitizedName}_${timestamp}`;
   const absoluteProjectFolder = path.join(process.cwd(), relativeProjectFolder);
-
-  fs.mkdirSync(absoluteProjectFolder, { recursive: true });
+  
+  if (!process.env.VERCEL) {
+    try {
+      fs.mkdirSync(absoluteProjectFolder, { recursive: true });
+    } catch(e) {
+      console.warn('Could not create project folder', e);
+    }
+  }
 
   // 1. Save order_details.json
   const orderDetails = {
@@ -275,12 +285,16 @@ async function handleOrderSubmission(
     notes: order.notes || '',
     createdAt: now.toISOString(),
   };
-
-  fs.writeFileSync(
-    path.join(absoluteProjectFolder, 'order_details.json'),
-    JSON.stringify(orderDetails, null, 2),
-    'utf8'
-  );
+  
+  if (!process.env.VERCEL) {
+    try {
+      fs.writeFileSync(
+        path.join(absoluteProjectFolder, 'order_details.json'),
+        JSON.stringify(orderDetails, null, 2),
+        'utf8'
+      );
+    } catch(e) {}
+  }
 
   // 2. Save Spread Images (Trang_01.jpg, Trang_02.jpg...)
   const savedSpreads: Array<{ name: string; pageNumber?: number; downloadUrl: string }> = [];
@@ -295,7 +309,12 @@ async function handleOrderSubmission(
         const base64Data = spread.dataUrl.replace(/^data:image\/\w+;base64,/, '');
         const buffer = Buffer.from(base64Data, 'base64');
         const filePath = path.join(absoluteProjectFolder, fileName);
-        fs.writeFileSync(filePath, buffer);
+        
+        if (!process.env.VERCEL) {
+          try {
+            fs.writeFileSync(filePath, buffer);
+          } catch(e) {}
+        }
         
         savedSpreads.push({
           name: fileName,
@@ -310,7 +329,12 @@ async function handleOrderSubmission(
     const base64Data = order.designImageData.replace(/^data:image\/\w+;base64,/, '');
     const buffer = Buffer.from(base64Data, 'base64');
     const filePath = path.join(absoluteProjectFolder, fileName);
-    fs.writeFileSync(filePath, buffer);
+    
+    if (!process.env.VERCEL) {
+      try {
+        fs.writeFileSync(filePath, buffer);
+      } catch(e) {}
+    }
 
     savedSpreads.push({
       name: fileName,

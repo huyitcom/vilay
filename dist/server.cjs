@@ -43,8 +43,12 @@ var import_vite = require("vite");
 var import_nodemailer = __toESM(require("nodemailer"), 1);
 dotenv.config();
 var UPLOADS_DIR = import_path.default.join(process.cwd(), "uploads");
-if (!import_fs.default.existsSync(UPLOADS_DIR)) {
-  import_fs.default.mkdirSync(UPLOADS_DIR, { recursive: true });
+try {
+  if (!process.env.VERCEL && !import_fs.default.existsSync(UPLOADS_DIR)) {
+    import_fs.default.mkdirSync(UPLOADS_DIR, { recursive: true });
+  }
+} catch (e) {
+  console.warn("Could not create uploads directory (expected on Vercel):", e);
 }
 var SMTP_CONFIG = {
   host: process.env.SMTP_HOST || "smtp.gmail.com",
@@ -224,7 +228,13 @@ async function handleOrderSubmission(order, baseUrl) {
   const timestamp = `${String(now.getHours()).padStart(2, "0")}-${String(now.getMinutes()).padStart(2, "0")}-${String(now.getSeconds()).padStart(2, "0")}`;
   const relativeProjectFolder = `uploads/${dateFolder}/${sanitizedName}_${timestamp}`;
   const absoluteProjectFolder = import_path.default.join(process.cwd(), relativeProjectFolder);
-  import_fs.default.mkdirSync(absoluteProjectFolder, { recursive: true });
+  if (!process.env.VERCEL) {
+    try {
+      import_fs.default.mkdirSync(absoluteProjectFolder, { recursive: true });
+    } catch (e) {
+      console.warn("Could not create project folder", e);
+    }
+  }
   const orderDetails = {
     customerDetails: {
       fullName: customerName,
@@ -242,11 +252,16 @@ async function handleOrderSubmission(order, baseUrl) {
     notes: order.notes || "",
     createdAt: now.toISOString()
   };
-  import_fs.default.writeFileSync(
-    import_path.default.join(absoluteProjectFolder, "order_details.json"),
-    JSON.stringify(orderDetails, null, 2),
-    "utf8"
-  );
+  if (!process.env.VERCEL) {
+    try {
+      import_fs.default.writeFileSync(
+        import_path.default.join(absoluteProjectFolder, "order_details.json"),
+        JSON.stringify(orderDetails, null, 2),
+        "utf8"
+      );
+    } catch (e) {
+    }
+  }
   const savedSpreads = [];
   if (order.spreads && Array.isArray(order.spreads) && order.spreads.length > 0) {
     for (let i = 0; i < order.spreads.length; i++) {
@@ -257,7 +272,12 @@ async function handleOrderSubmission(order, baseUrl) {
         const base64Data = spread.dataUrl.replace(/^data:image\/\w+;base64,/, "");
         const buffer = Buffer.from(base64Data, "base64");
         const filePath = import_path.default.join(absoluteProjectFolder, fileName);
-        import_fs.default.writeFileSync(filePath, buffer);
+        if (!process.env.VERCEL) {
+          try {
+            import_fs.default.writeFileSync(filePath, buffer);
+          } catch (e) {
+          }
+        }
         savedSpreads.push({
           name: fileName,
           pageNumber: pageNum,
@@ -270,7 +290,12 @@ async function handleOrderSubmission(order, baseUrl) {
     const base64Data = order.designImageData.replace(/^data:image\/\w+;base64,/, "");
     const buffer = Buffer.from(base64Data, "base64");
     const filePath = import_path.default.join(absoluteProjectFolder, fileName);
-    import_fs.default.writeFileSync(filePath, buffer);
+    if (!process.env.VERCEL) {
+      try {
+        import_fs.default.writeFileSync(filePath, buffer);
+      } catch (e) {
+      }
+    }
     savedSpreads.push({
       name: fileName,
       pageNumber: 1,
