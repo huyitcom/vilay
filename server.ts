@@ -4,7 +4,6 @@ import { v2 as cloudinary } from 'cloudinary';
 import express from 'express';
 import path from 'path';
 import fs from 'fs';
-import { createServer as createViteServer } from 'vite';
 import nodemailer from 'nodemailer';
 
 interface CustomerDetails {
@@ -585,7 +584,9 @@ app.post('/api/order/submit', async (req, res) => {
 
 async function startServer() {
   // Vite middleware for development
-  if (process.env.NODE_ENV !== 'production') {
+  if (process.env.NODE_ENV !== 'production' && !process.env.VERCEL) {
+    const viteModule = 'vite';
+    const { createServer: createViteServer } = await import(/* @vite-ignore */ viteModule);
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: 'spa',

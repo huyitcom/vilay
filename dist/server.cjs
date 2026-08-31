@@ -39,7 +39,6 @@ var import_cloudinary = require("cloudinary");
 var import_express = __toESM(require("express"), 1);
 var import_path = __toESM(require("path"), 1);
 var import_fs = __toESM(require("fs"), 1);
-var import_vite = require("vite");
 var import_nodemailer = __toESM(require("nodemailer"), 1);
 dotenv.config();
 var UPLOADS_DIR = import_path.default.join(process.cwd(), "uploads");
@@ -499,8 +498,13 @@ app.post("/api/order/submit", async (req, res) => {
   });
 });
 async function startServer() {
-  if (process.env.NODE_ENV !== "production") {
-    const vite = await (0, import_vite.createServer)({
+  if (process.env.NODE_ENV !== "production" && !process.env.VERCEL) {
+    const viteModule = "vite";
+    const { createServer: createViteServer } = await import(
+      /* @vite-ignore */
+      viteModule
+    );
+    const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: "spa"
     });
