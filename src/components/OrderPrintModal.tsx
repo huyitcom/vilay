@@ -139,7 +139,7 @@ export const OrderPrintModal: React.FC<OrderPrintModalProps> = ({
         throw new Error(
           initRes.ok
             ? 'Phản hồi từ máy chủ không hợp lệ.'
-            : `Không thể kết nối đến API (/api/order/init - mã lỗi ${initRes.status}). Vui lòng kiểm tra lại triển khai serverless trên Vercel.`
+            : `Không thể kết nối đến API (/api/order/init - mã lỗi ${initRes.status}). Chi tiết Vercel: ${initText.substring(0, 150)}`
         );
       }
       

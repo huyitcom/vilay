@@ -34,6 +34,8 @@ __export(server_exports, {
   default: () => server_default
 });
 module.exports = __toCommonJS(server_exports);
+
+// api-server.ts
 var dotenv = __toESM(require("dotenv"), 1);
 var import_cloudinary = require("cloudinary");
 var import_express = __toESM(require("express"), 1);
@@ -341,7 +343,6 @@ async function handleOrderSubmission(order, baseUrl) {
   }
 }
 var app = (0, import_express.default)();
-var PORT = 3e3;
 app.use((req, res, next) => {
   res.header("Access-Control-Allow-Origin", "*");
   res.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
@@ -497,6 +498,11 @@ app.post("/api/order/submit", async (req, res) => {
     error: result.error
   });
 });
+
+// server.ts
+var import_path2 = __toESM(require("path"), 1);
+var import_express2 = __toESM(require("express"), 1);
+var PORT = 3e3;
 async function startServer() {
   if (process.env.NODE_ENV !== "production" && !process.env.VERCEL) {
     const viteModule = "vite";
@@ -510,10 +516,10 @@ async function startServer() {
     });
     app.use(vite.middlewares);
   } else if (!process.env.VERCEL) {
-    const distPath = import_path.default.join(process.cwd(), "dist");
-    app.use(import_express.default.static(distPath));
+    const distPath = import_path2.default.join(process.cwd(), "dist");
+    app.use(import_express2.default.static(distPath));
     app.get("*", (req, res) => {
-      res.sendFile(import_path.default.join(distPath, "index.html"));
+      res.sendFile(import_path2.default.join(distPath, "index.html"));
     });
   }
   if (!process.env.VERCEL) {
