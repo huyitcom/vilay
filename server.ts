@@ -1,4 +1,4 @@
-import { app } from './api-server';
+import { app } from './api-server.js';
 import path from 'path';
 import express from 'express';
 

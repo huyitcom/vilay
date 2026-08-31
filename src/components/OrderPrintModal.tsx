@@ -144,7 +144,9 @@ export const OrderPrintModal: React.FC<OrderPrintModalProps> = ({
       }
       
       if (!initRes.ok || !initData?.projectFolder) {
-        throw new Error(initData?.error || 'Không thể khởi tạo thư mục lưu trữ.');
+        let errMsg = initData?.error || 'Không thể khởi tạo thư mục lưu trữ.';
+        if (initData?.details) errMsg += '\\nChi tiết: ' + initData.details;
+        throw new Error(errMsg);
       }
       
       const projectFolder = initData.projectFolder;
