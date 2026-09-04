@@ -9,6 +9,7 @@ import {
 import {
   BASIC_TEMPLATES,
   WITH_TEXT_TEMPLATES,
+  VIP_TEMPLATES,
   BG_PRESETS,
 } from '../data/constants';
 import {
@@ -39,6 +40,7 @@ interface EditorSidebarProps {
   onChangePosterSettings: (updated: PosterSettings) => void;
   onAutoFill?: (imageIds: string[]) => void;
   totalEmptySlotsCount?: number;
+  usedImageIds?: string[];
 }
 
 
@@ -638,9 +640,10 @@ export const EditorSidebar: React.FC<EditorSidebarProps> = ({
   onChangePosterSettings,
   onAutoFill,
   totalEmptySlotsCount = 0,
+  usedImageIds = [],
 }) => {
   const [activeTab, setActiveTab] = useState<'images' | 'layouts' | 'style'>('images');
-  const [layoutCategory, setLayoutCategory] = useState<'basic' | 'with-text'>('basic');
+  const [layoutCategory, setLayoutCategory] = useState<'basic' | 'with-text' | 'vip'>('vip');
   const [isDraggingOverLibrary, setIsDraggingOverLibrary] = useState(false);
   const [libraryImages, setLibraryImages] = useState<OptimizedImage[]>(() => imageOptimizer.getImages());
   const [imageColumns, setImageColumns] = useState<number>(2);
@@ -744,6 +747,26 @@ export const EditorSidebar: React.FC<EditorSidebarProps> = ({
             <div className="flex bg-stone-100 p-1 rounded-xl mb-3 shrink-0">
               <button
                 type="button"
+                onClick={() => setLayoutCategory('vip')}
+                className={`flex-1 py-1.5 px-2 rounded-lg text-xs font-semibold transition flex items-center justify-center gap-1.5 cursor-pointer ${
+                  layoutCategory === 'vip'
+                    ? 'bg-amber-100 text-amber-700 shadow-xs ring-1 ring-amber-300'
+                    : 'text-stone-500 hover:text-stone-800'
+                }`}
+              >
+                <span>VIP ✨</span>
+                <span
+                  className={`text-[10px] px-1.5 py-0.2 rounded-full font-medium ${
+                    layoutCategory === 'vip'
+                      ? 'bg-amber-200/50 text-amber-800'
+                      : 'bg-stone-200/70 text-stone-500'
+                  }`}
+                >
+                  {VIP_TEMPLATES.length}
+                </span>
+              </button>
+              <button
+                type="button"
                 onClick={() => setLayoutCategory('basic')}
                 className={`flex-1 py-1.5 px-2 rounded-lg text-xs font-semibold transition flex items-center justify-center gap-1.5 cursor-pointer ${
                   layoutCategory === 'basic'
@@ -786,7 +809,7 @@ export const EditorSidebar: React.FC<EditorSidebarProps> = ({
 
             <div className="flex-1 overflow-y-auto pr-1 -mr-1 pb-2">
               <div className="grid grid-cols-2 gap-2.5">
-                {(layoutCategory === 'basic' ? BASIC_TEMPLATES : WITH_TEXT_TEMPLATES).map((tmpl) => (
+                {(layoutCategory === 'vip' ? VIP_TEMPLATES : layoutCategory === 'basic' ? BASIC_TEMPLATES : WITH_TEXT_TEMPLATES).map((tmpl) => (
                   <button
                     key={tmpl.id}
                     onClick={() => onChangeTemplate(tmpl.id)}
@@ -914,7 +937,9 @@ export const EditorSidebar: React.FC<EditorSidebarProps> = ({
                 </div>
               ) : (
                 <div style={{ columnCount: imageColumns, columnGap: '8px' }}>
-                  {libraryImages.map((img) => (
+                  {libraryImages.map((img) => {
+                    const isUsed = usedImageIds.includes(img.id);
+                    return (
                     <div
                       key={img.id}
                       draggable
@@ -923,9 +948,14 @@ export const EditorSidebar: React.FC<EditorSidebarProps> = ({
                         e.dataTransfer.setData('application/photobook-image-id', img.id);
                         e.dataTransfer.effectAllowed = 'copy';
                       }}
-                      className="relative w-full mb-2 break-inside-avoid bg-stone-200 rounded-lg overflow-hidden group cursor-grab active:cursor-grabbing border border-stone-200 shadow-sm hover:ring-2 hover:ring-sky-500 transition-all inline-block"
+                      className={`relative w-full mb-2 break-inside-avoid bg-stone-200 rounded-lg overflow-hidden group cursor-grab active:cursor-grabbing border ${isUsed ? 'border-emerald-500 shadow-emerald-500/20' : 'border-stone-200 shadow-sm'} hover:ring-2 hover:ring-sky-500 transition-all inline-block`}
                     >
-                      <img src={img.thumbnailUrl} alt="Library item" className="w-full h-auto block pointer-events-none" />
+                      <img src={img.thumbnailUrl} alt="Library item" className={`w-full h-auto block pointer-events-none ${isUsed ? 'opacity-80' : ''}`} />
+                      {isUsed && (
+                        <div className="absolute top-1 left-1 bg-emerald-500 text-white rounded-full p-0.5 shadow-sm">
+                          <Check className="w-3 h-3" />
+                        </div>
+                      )}
                       {img.status === 'processing' && (
                         <div className="absolute inset-0 bg-white/50 backdrop-blur-[2px] flex flex-col items-center justify-center">
                           <div className="w-4 h-4 border-2 border-sky-500 border-t-transparent rounded-full animate-spin"></div>
@@ -942,7 +972,7 @@ export const EditorSidebar: React.FC<EditorSidebarProps> = ({
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
                     </div>
-                  ))}
+                  )})}
                 </div>
               )}
             </div>
@@ -952,6 +982,118 @@ export const EditorSidebar: React.FC<EditorSidebarProps> = ({
         {/* TAB 4: FRAME & BACKGROUND STYLE */}
         {activeTab === 'style' && (
           <div className="flex-1 overflow-y-auto p-5 space-y-5 animate-fade-in">
+            {/* Custom Overlay Upload */}
+            {(() => {
+              const currentTemplate = [...VIP_TEMPLATES, ...BASIC_TEMPLATES, ...WITH_TEXT_TEMPLATES].find((t) => t.id === templateId);
+              if (currentTemplate?.isOverlay) {
+                return (
+                  <div className="bg-stone-50 p-3.5 rounded-2xl border border-stone-200/80 space-y-4">
+                    <span className="text-xs font-bold text-sky-800 uppercase tracking-wider block">
+                      Khung Overlay Tùy Chỉnh
+                    </span>
+                    
+                    <div>
+                      <label className="text-[10px] font-bold text-stone-500 uppercase tracking-wider block mb-1">Tải ảnh Overlay (PNG Trong Suốt)</label>
+                      <input 
+                        type="file" 
+                        accept="image/png, image/svg+xml" 
+                        className="text-xs w-full"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            const reader = new FileReader();
+                            reader.onload = (ev) => {
+                              onChangePosterSettings({ ...posterSettings, customOverlayUri: ev.target?.result as string });
+                            };
+                            reader.readAsDataURL(file);
+                          }
+                        }}
+                      />
+                    </div>
+                    
+                    <div>
+                      <label className="text-[10px] font-bold text-stone-500 uppercase tracking-wider block mb-1">Tải ảnh Nền (Background)</label>
+                      <input 
+                        type="file" 
+                        accept="image/*" 
+                        className="text-xs w-full"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            const reader = new FileReader();
+                            reader.onload = (ev) => {
+                              onChangePosterSettings({ ...posterSettings, customBackgroundUri: ev.target?.result as string });
+                            };
+                            reader.readAsDataURL(file);
+                          }
+                        }}
+                      />
+                    </div>
+
+                    <div className="space-y-3 pt-2 border-t border-stone-200">
+                      <span className="text-[10px] font-bold text-stone-500 uppercase tracking-wider block mb-1">Tọa độ lỗ hổng (Slot)</span>
+                      
+                      {/* X Slider */}
+                      <div>
+                        <div className="flex justify-between text-[10px] font-semibold text-stone-600 mb-1">
+                          <span>Left (X)</span><span>{posterSettings.customSlotX ?? currentTemplate.slotsCoordinates?.[0]?.x ?? 0}%</span>
+                        </div>
+                        <input type="range" min="0" max="100" step="0.5"
+                          value={posterSettings.customSlotX ?? currentTemplate.slotsCoordinates?.[0]?.x ?? 0}
+                          onChange={(e) => onChangePosterSettings({ ...posterSettings, customSlotX: parseFloat(e.target.value) })}
+                          className="w-full accent-sky-600" />
+                      </div>
+                      
+                      {/* Y Slider */}
+                      <div>
+                        <div className="flex justify-between text-[10px] font-semibold text-stone-600 mb-1">
+                          <span>Top (Y)</span><span>{posterSettings.customSlotY ?? currentTemplate.slotsCoordinates?.[0]?.y ?? 0}%</span>
+                        </div>
+                        <input type="range" min="0" max="100" step="0.5"
+                          value={posterSettings.customSlotY ?? currentTemplate.slotsCoordinates?.[0]?.y ?? 0}
+                          onChange={(e) => onChangePosterSettings({ ...posterSettings, customSlotY: parseFloat(e.target.value) })}
+                          className="w-full accent-sky-600" />
+                      </div>
+
+                      {/* Width Slider */}
+                      <div>
+                        <div className="flex justify-between text-[10px] font-semibold text-stone-600 mb-1">
+                          <span>Chiều rộng</span><span>{posterSettings.customSlotW ?? currentTemplate.slotsCoordinates?.[0]?.width ?? 100}%</span>
+                        </div>
+                        <input type="range" min="10" max="150" step="0.5"
+                          value={posterSettings.customSlotW ?? currentTemplate.slotsCoordinates?.[0]?.width ?? 100}
+                          onChange={(e) => onChangePosterSettings({ ...posterSettings, customSlotW: parseFloat(e.target.value) })}
+                          className="w-full accent-sky-600" />
+                      </div>
+
+                      {/* Height Slider */}
+                      <div>
+                        <div className="flex justify-between text-[10px] font-semibold text-stone-600 mb-1">
+                          <span>Chiều cao</span><span>{posterSettings.customSlotH ?? currentTemplate.slotsCoordinates?.[0]?.height ?? 100}%</span>
+                        </div>
+                        <input type="range" min="10" max="150" step="0.5"
+                          value={posterSettings.customSlotH ?? currentTemplate.slotsCoordinates?.[0]?.height ?? 100}
+                          onChange={(e) => onChangePosterSettings({ ...posterSettings, customSlotH: parseFloat(e.target.value) })}
+                          className="w-full accent-sky-600" />
+                      </div>
+
+                      {/* Rotation Slider */}
+                      <div>
+                        <div className="flex justify-between text-[10px] font-semibold text-stone-600 mb-1">
+                          <span>Góc nghiêng</span><span>{posterSettings.customSlotRotation ?? currentTemplate.slotsCoordinates?.[0]?.rotation ?? 0}°</span>
+                        </div>
+                        <input type="range" min="-180" max="180" step="1"
+                          value={posterSettings.customSlotRotation ?? currentTemplate.slotsCoordinates?.[0]?.rotation ?? 0}
+                          onChange={(e) => onChangePosterSettings({ ...posterSettings, customSlotRotation: parseFloat(e.target.value) })}
+                          className="w-full accent-sky-600" />
+                      </div>
+                    </div>
+                  </div>
+                );
+              }
+              return null;
+            })()}
+
             {/* Aspect Ratio Selector */}
             <div className="bg-stone-50 p-3.5 rounded-2xl border border-stone-200/80 space-y-4">
               <span className="text-xs font-bold text-stone-800 uppercase tracking-wider block">

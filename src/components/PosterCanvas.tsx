@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { imageOptimizer } from '../utils/imageOptimizer';
 import { FrameSlot, PosterSettings, TemplateId, TextConfig, CustomTextElement } from '../types';
-import { PHOTO_FILTERS } from '../data/constants';
+import { PHOTO_FILTERS, TEMPLATES } from '../data/constants';
 import { TEXT_STYLE_PRESETS } from '../data/textStyles';
 import { Upload, Sliders, Plus, Trash2, RotateCw, RotateCcw, Type, Check } from 'lucide-react';
 
@@ -87,6 +87,8 @@ export const PosterCanvas: React.FC<PosterCanvasProps> = ({
   const isExtremeLandscape = wRatio / hRatio >= 2;
   const baseWidth = isExtremeLandscape ? 960 : isLandscape ? 820 : 560;
   
+  const templateDef = TEMPLATES.find((t) => t.id === templateId);
+
   const getBaseHeight = (ratioStr: string, w: number) => {
     const parts = ratioStr.split(':');
     const wRatio = parseInt(parts[0]);
@@ -793,6 +795,44 @@ export const PosterCanvas: React.FC<PosterCanvasProps> = ({
               <div className="w-full h-full min-h-0">{renderSlot(3, 'w-full h-full')}</div>
               <div className="w-full h-full min-h-0">{renderSlot(4, 'w-full h-full')}</div>
             </div>
+          </div>
+        )}
+
+        {/* OVERLAY TEMPLATE */}
+        {templateDef?.isOverlay && (
+          <div className="relative w-full h-full bg-cover bg-center overflow-hidden" style={{ backgroundImage: `url(${posterSettings.customBackgroundUri || templateDef?.backgroundUri || ''})` }}>
+            {/* The Slots */}
+            {templateDef?.slotsCoordinates?.map((defaultCoord, i) => {
+              // Apply overrides if this is the first slot (we only support adjusting slot 0 for now)
+              const isFirst = i === 0;
+              const x = isFirst && posterSettings.customSlotX !== undefined ? posterSettings.customSlotX : defaultCoord.x;
+              const y = isFirst && posterSettings.customSlotY !== undefined ? posterSettings.customSlotY : defaultCoord.y;
+              const width = isFirst && posterSettings.customSlotW !== undefined ? posterSettings.customSlotW : defaultCoord.width;
+              const height = isFirst && posterSettings.customSlotH !== undefined ? posterSettings.customSlotH : defaultCoord.height;
+              const rotation = isFirst && posterSettings.customSlotRotation !== undefined ? posterSettings.customSlotRotation : defaultCoord.rotation;
+
+              return (
+                <div 
+                  key={i}
+                  className="absolute z-10"
+                  style={{ 
+                    left: `${x}%`, 
+                    top: `${y}%`, 
+                    width: `${width}%`, 
+                    height: `${height}%`,
+                    transform: `rotate(${rotation}deg)` 
+                  }}
+                >
+                  {renderSlot(i, 'w-full h-full')}
+                </div>
+              );
+            })}
+            
+            {/* The Overlay */}
+            <div 
+              className="absolute inset-0 z-20 bg-no-repeat bg-contain bg-center pointer-events-none" 
+              style={{ backgroundImage: `url(${posterSettings.customOverlayUri || templateDef?.overlayUri || ''})` }} 
+            />
           </div>
         )}
 

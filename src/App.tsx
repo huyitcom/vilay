@@ -6,6 +6,7 @@ import {
   TemplateId,
   TextConfig,
   CustomTextElement,
+  SavedProject,
 } from './types';
 import {
   INITIAL_ALBUM_PAGES,
@@ -26,6 +27,13 @@ import { ExportAlbumModal } from './components/ExportAlbumModal';
 import { TemplatePickerModal } from './components/TemplatePickerModal';
 import { InitialSetupModal } from './components/InitialSetupModal';
 import { AddTextModal } from './components/AddTextModal';
+import { SaveProjectModal } from './components/SaveProjectModal';
+import { ProjectManagerModal } from './components/ProjectManagerModal';
+import {
+  saveProject,
+  buildSavedProject,
+  exportProjectFile,
+} from './utils/projectStorage';
 
 import { ProcessingToast } from './components/ProcessingToast';
 import { toJpeg, getFontEmbedCSS } from 'html-to-image';
@@ -50,6 +58,21 @@ export default function App() {
   const [isTemplatePickerOpen, setIsTemplatePickerOpen] = useState(false);
   const [isAddTextModalOpen, setIsAddTextModalOpen] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
+  const [isSaveModalOpen, setIsSaveModalOpen] = useState(false);
+  const [isProjectManagerOpen, setIsProjectManagerOpen] = useState(false);
+
+  // Current Project Tracking
+  const [currentProjectId, setCurrentProjectId] = useState<string | null>(null);
+  const [currentProjectName, setCurrentProjectName] = useState<string>('Album Cưới 1');
+
+  // Custom UI for Dialogs/Toasts (since iframe blocks window.alert/confirm)
+  const [toastMsg, setToastMsg] = useState<{ title: string; type: 'success' | 'error' | 'info' } | null>(null);
+  const [confirmDialog, setConfirmDialog] = useState<{ message: string; onConfirm: () => void } | null>(null);
+
+  const showAlert = (title: string, type: 'success' | 'error' | 'info' = 'info') => {
+    setToastMsg({ title, type });
+    setTimeout(() => setToastMsg(null), 3000);
+  };
 
   const posterRef = useRef<HTMLDivElement>(null);
 
@@ -104,7 +127,7 @@ export default function App() {
         slots: newSlots,
         posterSettings: {
           ...page.posterSettings,
-          aspectRatio: selectedTemplate?.aspectRatio || page.posterSettings.aspectRatio || '50:35',
+          aspectRatio: page.posterSettings.aspectRatio || selectedTemplate?.aspectRatio || '50:35',
         },
       };
     });
@@ -143,7 +166,7 @@ export default function App() {
           slots: newSlots,
           posterSettings: {
             ...page.posterSettings,
-            aspectRatio: selectedTemplate?.aspectRatio || page.posterSettings.aspectRatio || '50:35',
+            aspectRatio: page.posterSettings.aspectRatio || selectedTemplate?.aspectRatio || '50:35',
           },
         };
       });
@@ -191,16 +214,20 @@ export default function App() {
   // Delete a Page
   const handleDeletePage = (index: number) => {
     if (pages.length <= 1) {
-      alert('Album cần có ít nhất 1 trang thiết kế.');
+      showAlert('Album cần có ít nhất 1 trang thiết kế.', 'error');
       return;
     }
-    if (confirm(`Bạn có chắc chắn muốn xóa Trang ${index + 1}?`)) {
-      setPages((prev) => {
-        const filtered = prev.filter((_, i) => i !== index);
-        return filtered.map((p, i) => ({ ...p, pageNumber: i + 1 }));
-      });
-      setActivePageIndex((prev) => (prev >= index ? Math.max(0, prev - 1) : prev));
-    }
+    setConfirmDialog({
+      message: `Bạn có chắc chắn muốn xóa Trang ${index + 1}?`,
+      onConfirm: () => {
+        setPages((prev) => {
+          const filtered = prev.filter((_, i) => i !== index);
+          return filtered.map((p, i) => ({ ...p, pageNumber: i + 1 }));
+        });
+        setActivePageIndex((prev) => (prev >= index ? Math.max(0, prev - 1) : prev));
+        setConfirmDialog(null);
+      }
+    });
   };
 
   // Move Page Order (Reorder)
@@ -557,13 +584,73 @@ export default function App() {
     return success ? uploadedPages : false;
   };
 
+  // Project persistence
+  const handleSaveProject = async (name: string, asNew: boolean) => {
+    try {
+      const existingId = asNew ? undefined : (currentProjectId || undefined);
+      const newProj = buildSavedProject(name, pages, isSetupComplete, existingId);
+      await saveProject(newProj);
+      setCurrentProjectId(newProj.id);
+      setCurrentProjectName(newProj.name);
+      setIsSaveModalOpen(false);
+      showAlert(`Đã lưu dự án "${newProj.name}" thành công!`, 'success');
+    } catch (error: any) {
+      console.error('Save error:', error);
+      showAlert(error?.message || 'Không thể lưu dự án.', 'error');
+    }
+  };
+
+  const handleExportCurrentProjectFile = () => {
+    try {
+      const proj = buildSavedProject(currentProjectName, pages, isSetupComplete, currentProjectId || undefined);
+      exportProjectFile(proj);
+      showAlert(`Đã tải file "${proj.name}.xalbum" về máy tính!`, 'success');
+    } catch (error) {
+      console.error(error);
+      showAlert('Lỗi khi xuất file dự án về máy tính.', 'error');
+    }
+  };
+
+  const handleLoadProject = (project: SavedProject) => {
+    setPages(project.pages);
+    setIsSetupComplete(project.isSetupComplete);
+    setCurrentProjectId(project.id);
+    setCurrentProjectName(project.name);
+    setActivePageIndex(0);
+    setSelectedTextId(null);
+    setActiveSlotIndex(null);
+    setIsProjectManagerOpen(false);
+  };
+
+  const handleNewProject = () => {
+    setConfirmDialog({
+      message: 'Tạo một dự án album mới? Hãy chắc chắn bạn đã lưu album hiện tại trước khi tạo mới.',
+      onConfirm: () => {
+        const defaultPages = generateAlbumPages(10, '50:35');
+        setPages(defaultPages);
+        setActivePageIndex(0);
+        setCurrentProjectId(null);
+        setCurrentProjectName('Album Cưới Mới');
+        setIsSetupComplete(false);
+        setSelectedTextId(null);
+        setActiveSlotIndex(null);
+        setConfirmDialog(null);
+        showAlert('Đã tạo dự án album mới!', 'success');
+      }
+    });
+  };
+
   // Reset Entire Project to Default
   const handleResetAll = () => {
-    if (confirm('Khôi phục lại toàn bộ album về các trang mẫu mặc định ban đầu?')) {
-      const currentAspectRatio = currentPage?.posterSettings?.aspectRatio || '50:35';
-      setPages(generateAlbumPages(10, currentAspectRatio));
-      setActivePageIndex(0);
-    }
+    setConfirmDialog({
+      message: 'Khôi phục lại toàn bộ album về các trang mẫu mặc định ban đầu?',
+      onConfirm: () => {
+        const currentAspectRatio = currentPage?.posterSettings?.aspectRatio || '50:35';
+        setPages(generateAlbumPages(10, currentAspectRatio));
+        setActivePageIndex(0);
+        setConfirmDialog(null);
+      }
+    });
   };
 
   const handleSetupComplete = (aspectRatio: import('./types').AspectRatioType, pageCount: number) => {
@@ -582,10 +669,13 @@ export default function App() {
       <Navbar
         totalPages={pages.length}
         activePageIndex={activePageIndex}
+        currentProjectName={currentProjectName}
         onOpenOrderModal={() => setIsOrderModalOpen(true)}
         onOpenExportModal={() => setIsExportAlbumOpen(true)}
         onResetAll={handleResetAll}
-              />
+        onOpenSaveProject={() => setIsSaveModalOpen(true)}
+        onOpenProjectManager={() => setIsProjectManagerOpen(true)}
+      />
 
       {/* Main App Layout: Left Workspace (Canvas + Filmstrip) + Right Control Panel */}
       <div className="flex-1 flex flex-col lg:flex-row overflow-hidden">
@@ -660,6 +750,7 @@ export default function App() {
           onChangePosterSettings={handlePosterSettingsChange}
           onAutoFill={handleApplyBatchPhotos}
           totalEmptySlotsCount={pages.reduce((acc, page) => acc + page.slots.filter(s => !s.imageUri || s.imageUri.includes('unsplash.com')).length, 0)}
+          usedImageIds={pages.flatMap(p => p.slots).map(s => s.imageUri).filter(Boolean) as string[]}
         />
       </div>
 
@@ -700,6 +791,42 @@ export default function App() {
       />
 
       <ProcessingToast />
+      
+      {/* Custom Toast Message */}
+      {toastMsg && (
+        <div className={`fixed top-16 left-1/2 -translate-x-1/2 z-[100] px-5 py-3 rounded-xl shadow-xl flex items-center gap-3 animate-in fade-in slide-in-from-top-4 duration-300 ${
+          toastMsg.type === 'success' ? 'bg-green-600' :
+          toastMsg.type === 'error' ? 'bg-red-600' :
+          'bg-stone-800'
+        } text-white font-medium text-sm max-w-sm text-center`}>
+          {toastMsg.title}
+        </div>
+      )}
+
+      {/* Custom Confirm Dialog */}
+      {confirmDialog && (
+        <div className="fixed inset-0 bg-stone-900/60 z-[110] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
+          <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm flex flex-col items-center text-center">
+            <h3 className="text-lg font-bold text-stone-900 mb-3">Xác nhận</h3>
+            <p className="text-[15px] text-stone-600 mb-6">{confirmDialog.message}</p>
+            <div className="flex items-center gap-3 w-full">
+              <button
+                onClick={() => setConfirmDialog(null)}
+                className="flex-1 px-4 py-2.5 bg-stone-100 hover:bg-stone-200 text-stone-700 font-semibold rounded-xl transition cursor-pointer"
+              >
+                Hủy
+              </button>
+              <button
+                onClick={confirmDialog.onConfirm}
+                className="flex-1 px-4 py-2.5 bg-sky-500 hover:bg-sky-600 text-white font-semibold rounded-xl transition cursor-pointer shadow-sm hover:shadow"
+              >
+                Đồng ý
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <TemplatePickerModal
         isOpen={isTemplatePickerOpen}
         onClose={() => setIsTemplatePickerOpen(false)}
@@ -712,6 +839,25 @@ export default function App() {
           handleApplyTemplateToAll(newId);
           setIsTemplatePickerOpen(false);
         }}
+      />
+
+      <SaveProjectModal
+        isOpen={isSaveModalOpen}
+        onClose={() => setIsSaveModalOpen(false)}
+        currentProjectName={currentProjectName}
+        currentProjectId={currentProjectId}
+        onSave={handleSaveProject}
+        onExportFile={handleExportCurrentProjectFile}
+      />
+
+      <ProjectManagerModal
+        isOpen={isProjectManagerOpen}
+        onClose={() => setIsProjectManagerOpen(false)}
+        currentProjectId={currentProjectId}
+        onLoadProject={handleLoadProject}
+        onNewProject={handleNewProject}
+        onOpenSaveCurrent={() => setIsSaveModalOpen(true)}
+        onShowToast={showAlert}
       />
     </div>
   );

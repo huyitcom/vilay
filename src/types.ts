@@ -50,9 +50,17 @@ export interface PosterSettings {
   borderColor: string;
   blockBgColor?: string;
   aspectRatio: AspectRatioType;
+  // --- Custom Overlay Overrides ---
+  customOverlayUri?: string;
+  customBackgroundUri?: string;
+  customSlotX?: number; // percentage
+  customSlotY?: number; // percentage
+  customSlotW?: number; // percentage
+  customSlotH?: number; // percentage
+  customSlotRotation?: number; // degrees
 }
 
-export type TemplateCategory = 'basic' | 'with-text';
+export type TemplateCategory = 'basic' | 'with-text' | 'vip';
 
 export type TemplateId = string;
 
@@ -64,6 +72,17 @@ export interface TemplateDefinition {
   aspectRatio: AspectRatioType;
   category?: TemplateCategory;
   previewThumbnail?: string;
+  // --- Overlay Architecture ---
+  isOverlay?: boolean;
+  backgroundUri?: string; // Optional background layer
+  overlayUri?: string;    // The transparent PNG with holes
+  slotsCoordinates?: {
+    x: number;      // percentage
+    y: number;      // percentage
+    width: number;  // percentage
+    height: number; // percentage
+    rotation: number; // degrees
+  }[];
 }
 
 export interface CustomTextElement {
@@ -96,5 +115,17 @@ export interface AlbumProject {
   title: string;
   pages: AlbumPage[];
   activePageIndex: number;
+}
+
+export interface SavedProject {
+  id: string;
+  name: string;
+  createdAt: number;
+  updatedAt: number;
+  pageCount: number;
+  aspectRatio: AspectRatioType;
+  thumbnail?: string | null;
+  pages: AlbumPage[];
+  isSetupComplete: boolean;
 }
 

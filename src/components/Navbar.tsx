@@ -1,24 +1,30 @@
 import React from 'react';
-import { RotateCcw, ShoppingBag, Download } from 'lucide-react';
+import { RotateCcw, ShoppingBag, Download, Save, FolderOpen } from 'lucide-react';
 
 interface NavbarProps {
   totalPages: number;
   activePageIndex?: number;
+  currentProjectName?: string;
   onOpenOrderModal: () => void;
   onOpenExportModal: () => void;
   onResetAll: () => void;
-  }
+  onOpenSaveProject: () => void;
+  onOpenProjectManager: () => void;
+}
 
 export const Navbar: React.FC<NavbarProps> = ({
   totalPages: _totalPages,
+  currentProjectName,
   onOpenOrderModal,
   onOpenExportModal,
   onResetAll,
+  onOpenSaveProject,
+  onOpenProjectManager,
 }) => {
   return (
     <header className="w-full bg-white border-b border-stone-200 sticky top-0 z-40 px-3 sm:px-6 py-2.5 shadow-xs flex items-center justify-between gap-4">
       {/* Left: Photobook Vietnam Logo */}
-      <div className="flex items-center shrink-0">
+      <div className="flex items-center gap-3 shrink-0">
         <a
           href="https://photobookvietnam.net"
           target="_blank"
@@ -32,19 +38,27 @@ export const Navbar: React.FC<NavbarProps> = ({
             referrerPolicy="no-referrer"
           />
         </a>
+
+        {currentProjectName && (
+          <button
+            onClick={onOpenProjectManager}
+            className="hidden md:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-stone-100 hover:bg-stone-200 border border-stone-200 text-stone-700 text-xs font-semibold max-w-[200px] truncate transition cursor-pointer"
+            title="Nhấn để mở danh sách dự án"
+          >
+            <span className="w-1.5 h-1.5 rounded-full bg-sky-500 shrink-0"></span>
+            <span className="truncate">{currentProjectName}</span>
+          </button>
+        )}
       </div>
 
-      {/* Center: ViLay Logo */}
+      {/* Center: xAlbum Logo */}
       <div className="flex items-center justify-center select-none">
         <a
           href="#"
-          className="flex items-center gap-2 group decoration-none"
+          className="flex items-center group decoration-none"
         >
-          <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-gradient-to-tr from-sky-600 to-indigo-500 flex items-center justify-center shadow-xs group-hover:scale-105 transition-transform duration-200">
-            <span className="text-white font-extrabold text-sm sm:text-base tracking-tighter">V</span>
-          </div>
-          <span className="text-xl sm:text-2xl md:text-[25px] font-black tracking-tight text-stone-900 group-hover:text-stone-800 transition">
-            Vi<span className="text-sky-500">Lay</span>
+          <span className="text-2xl sm:text-3xl md:text-[28px] font-black tracking-[0.2em] text-slate-900 transition-transform duration-200 group-hover:scale-105 ml-2">
+            xAlbum
           </span>
         </a>
       </div>
@@ -52,6 +66,23 @@ export const Navbar: React.FC<NavbarProps> = ({
       {/* Right: Action Buttons */}
       <div className="flex items-center gap-2 sm:gap-2.5 shrink-0">
         
+        {/* Project Manager / Open */}
+        <button
+          onClick={onOpenProjectManager}
+          className="p-2 sm:p-2 bg-stone-100 hover:bg-stone-200 text-stone-800 rounded-xl border border-stone-200 transition cursor-pointer shadow-2xs"
+          title="Quản lý dự án"
+        >
+          <FolderOpen className="w-4 h-4 text-stone-700" />
+        </button>
+
+        {/* Save Project */}
+        <button
+          onClick={onOpenSaveProject}
+          className="p-2 sm:p-2 bg-sky-50 hover:bg-sky-100 border border-sky-200 rounded-xl transition cursor-pointer shadow-2xs"
+          title="Lưu album hiện tại"
+        >
+          <Save className="w-4 h-4 text-sky-700" />
+        </button>
 
         {/* Tải Album (ZIP / JPG) */}
         <button
