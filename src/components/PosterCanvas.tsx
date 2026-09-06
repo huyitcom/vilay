@@ -16,6 +16,7 @@ interface PosterCanvasProps {
   onSelectSlot: (index: number) => void;
   onSelectText?: (id: string | null) => void;
   onSlotImageChange: (index: number, imageUri: string) => void;
+  onSwapSlots?: (indexA: number, indexB: number) => void;
   onUpdateSlot?: (updated: FrameSlot) => void;
   onUpdateCustomText?: (updated: CustomTextElement) => void;
   onDeleteCustomText?: (id: string) => void;
@@ -36,6 +37,7 @@ export const PosterCanvas: React.FC<PosterCanvasProps> = ({
   onSelectSlot,
   onSelectText,
   onSlotImageChange,
+  onSwapSlots,
   onUpdateSlot,
   onUpdateCustomText,
   onDeleteCustomText,
@@ -264,6 +266,15 @@ export const PosterCanvas: React.FC<PosterCanvasProps> = ({
     e.preventDefault();
     setDragOverIndex(null);
 
+    const swapIndexStr = e.dataTransfer.getData('application/photobook-swap-slot');
+    if (swapIndexStr) {
+      const sourceIndex = parseInt(swapIndexStr, 10);
+      if (!isNaN(sourceIndex) && sourceIndex !== targetIndex && onSwapSlots) {
+        onSwapSlots(sourceIndex, targetIndex);
+      }
+      return;
+    }
+
     const customId = e.dataTransfer.getData('application/photobook-image-id');
     if (customId) {
       onSlotImageChange(targetIndex, customId);
@@ -296,6 +307,10 @@ export const PosterCanvas: React.FC<PosterCanvasProps> = ({
     const target = e.target as HTMLElement;
     if (target.closest('button') || target.closest('label') || target.closest('input')) {
       return;
+    }
+
+    if (e.shiftKey) {
+      return; // Let HTML5 drag take over
     }
 
     if (onSelectTextRef.current) {
@@ -342,9 +357,18 @@ export const PosterCanvas: React.FC<PosterCanvasProps> = ({
     return (
       <div
         key={slot.id || index}
+        draggable={isFilled}
+        onDragStart={(e) => {
+          if (!e.shiftKey) {
+            e.preventDefault();
+            return;
+          }
+          e.dataTransfer.setData('application/photobook-swap-slot', index.toString());
+          e.dataTransfer.effectAllowed = 'move';
+        }}
         onDragOver={(e) => {
           e.preventDefault();
-          e.dataTransfer.dropEffect = 'copy';
+          e.dataTransfer.dropEffect = e.dataTransfer.types.includes('application/photobook-swap-slot') ? 'move' : 'copy';
           if (dragOverIndex !== index) setDragOverIndex(index);
         }}
         onDragLeave={(e) => {

@@ -270,6 +270,37 @@ export default function App() {
     }
   };
 
+  // Swap slots
+  const handleSwapSlots = (indexA: number, indexB: number) => {
+    updateCurrentPage((page) => {
+      const updatedSlots = [...page.slots];
+      if (updatedSlots[indexA] && updatedSlots[indexB]) {
+        const temp = { ...updatedSlots[indexA] };
+        
+        updatedSlots[indexA] = {
+          ...updatedSlots[indexA],
+          imageUri: updatedSlots[indexB].imageUri,
+          zoom: updatedSlots[indexB].zoom,
+          offsetX: updatedSlots[indexB].offsetX,
+          offsetY: updatedSlots[indexB].offsetY,
+          filter: updatedSlots[indexB].filter,
+          rotation: updatedSlots[indexB].rotation,
+        };
+        
+        updatedSlots[indexB] = {
+          ...updatedSlots[indexB],
+          imageUri: temp.imageUri,
+          zoom: temp.zoom,
+          offsetX: temp.offsetX,
+          offsetY: temp.offsetY,
+          filter: temp.filter,
+          rotation: temp.rotation,
+        };
+      }
+      return { ...page, slots: updatedSlots };
+    });
+  };
+
   // Remove Photo from Slot
   const handleRemovePhoto = (slotId: string) => {
     updateCurrentPage((page) => ({
@@ -708,6 +739,7 @@ export default function App() {
                 activeSlotIndex={activeSlotIndex}
                 onSelectSlot={(index) => setActiveSlotIndex(index)}
                 onSlotImageChange={handleSlotImageChange}
+                onSwapSlots={handleSwapSlots}
                 onUpdateSlot={handleUpdateSlot}
                 onOpenCropModal={(slot, index) => setEditingSlot({ slot, index })}
                 posterRef={posterRef}
