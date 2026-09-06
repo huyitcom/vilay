@@ -118,9 +118,9 @@ export const ExportAlbumModal: React.FC<ExportAlbumModalProps> = ({
         setShowPasswordPrompt(false);
         setPassword('');
       }, 1200);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Lỗi khi nén file zip album:', err);
-      alert('Đã xảy ra lỗi khi tạo file ZIP. Vui lòng thử lại!');
+      alert(`Đã xảy ra lỗi khi tạo file ZIP: ${err?.message || 'Lỗi không xác định'}. Vui lòng thử lại!`);
       setIsExportingZip(false);
       setOffscreenPage(null);
     }

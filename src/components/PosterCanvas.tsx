@@ -422,6 +422,7 @@ export const PosterCanvas: React.FC<PosterCanvasProps> = ({
             <img
               src={finalSrc}
               alt={`Frame ${index + 1}`}
+              crossOrigin="anonymous"
               draggable={false}
               className="w-full h-full object-cover transition-transform duration-75 pointer-events-none select-none"
               style={{

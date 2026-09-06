@@ -51,13 +51,29 @@ export async function captureCanvasAs300DpiJpeg(
     console.warn('Could not embed external font CSS in canvas capture:', err);
   }
 
-  const rawDataUrl = await toJpeg(element, {
-    pixelRatio,
-    quality: 0.92,
-    backgroundColor: bgColor || '#ffffff',
-    cacheBust: true,
-    fontEmbedCSS,
-  });
+  let rawDataUrl: string;
+  try {
+    rawDataUrl = await toJpeg(element, {
+      pixelRatio,
+      quality: 0.92,
+      backgroundColor: bgColor || '#ffffff',
+      cacheBust: true,
+      fontEmbedCSS,
+    });
+  } catch (err) {
+    console.warn('First toJpeg attempt failed, trying again without fontEmbedCSS and cacheBust...', err);
+    try {
+      rawDataUrl = await toJpeg(element, {
+        pixelRatio,
+        quality: 0.92,
+        backgroundColor: bgColor || '#ffffff',
+        cacheBust: false,
+      });
+    } catch (finalErr: any) {
+      console.error('Final toJpeg attempt failed:', finalErr);
+      throw new Error(`Lỗi render ảnh HTML: ${finalErr?.message || 'Không xác định'}`);
+    }
+  }
 
   return setDpiInJpegDataUrl(rawDataUrl, 300);
 }
