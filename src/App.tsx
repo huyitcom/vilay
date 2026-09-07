@@ -762,6 +762,16 @@ export default function App() {
             onMovePage={handleMovePage}
             onOpenTemplatePicker={() => setIsTemplatePickerOpen(true)}
             onOpenAddTextModal={() => setIsAddTextModalOpen(true)}
+            onAutoFill={() => {
+              import('./utils/imageOptimizer').then(({ imageOptimizer }) => {
+                const images = imageOptimizer.getImages().map(i => i.id);
+                if (images.length === 0) {
+                  alert('Vui lòng tải ảnh lên trước khi rải hình!');
+                  return;
+                }
+                handleApplyBatchPhotos(images);
+              });
+            }}
           />
         </main>
 

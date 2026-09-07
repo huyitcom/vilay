@@ -1,5 +1,5 @@
 import React from 'react';
-import { Plus, Copy, Trash2, ChevronLeft, ChevronRight, LayoutGrid, Layers, Type } from 'lucide-react';
+import { Plus, Copy, Trash2, ChevronLeft, ChevronRight, LayoutGrid, Layers, Type, Sparkles } from 'lucide-react';
 import { AlbumPage, TemplateId } from '../types';
 import { TEMPLATES } from '../data/constants';
 import { TemplateThumbnail } from './EditorSidebar';
@@ -14,6 +14,7 @@ interface PageFilmstripProps {
   onMovePage: (fromIndex: number, toIndex: number) => void;
   onOpenTemplatePicker: () => void;
   onOpenAddTextModal?: () => void;
+  onAutoFill?: () => void;
 }
 
 export const PageFilmstrip: React.FC<PageFilmstripProps> = ({
@@ -26,6 +27,7 @@ export const PageFilmstrip: React.FC<PageFilmstripProps> = ({
   onMovePage,
   onOpenTemplatePicker,
   onOpenAddTextModal,
+  onAutoFill,
 }) => {
   return (
     <div className="w-full bg-white border-t border-stone-200 shadow-sm py-2.5 px-3 sm:px-6 flex flex-col gap-2">
@@ -52,6 +54,16 @@ export const PageFilmstrip: React.FC<PageFilmstripProps> = ({
             >
               <Type className="w-3.5 h-3.5" />
               <span>Thêm Chữ</span>
+            </button>
+          )}
+
+          {onAutoFill && (
+            <button
+              onClick={onAutoFill}
+              className="flex items-center gap-1 text-[11px] font-semibold text-violet-700 hover:text-violet-800 bg-violet-50 hover:bg-violet-100 px-2.5 py-1 rounded-md border border-violet-200 transition cursor-pointer shadow-2xs ml-1"
+            >
+              <Sparkles className="w-3.5 h-3.5" />
+              <span>Rải hình tự động</span>
             </button>
           )}
         </div>

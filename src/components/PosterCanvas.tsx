@@ -422,7 +422,7 @@ export const PosterCanvas: React.FC<PosterCanvasProps> = ({
             <img
               src={finalSrc}
               alt={`Frame ${index + 1}`}
-              crossOrigin="anonymous"
+              crossOrigin={finalSrc?.startsWith('http') ? "anonymous" : undefined}
               draggable={false}
               className="w-full h-full object-cover transition-transform duration-75 pointer-events-none select-none"
               style={{
@@ -825,7 +825,17 @@ export const PosterCanvas: React.FC<PosterCanvasProps> = ({
 
         {/* OVERLAY TEMPLATE */}
         {templateDef?.isOverlay && (
-          <div className="relative w-full h-full bg-cover bg-center overflow-hidden" style={{ backgroundImage: `url(${posterSettings.customBackgroundUri || templateDef?.backgroundUri || ''})` }}>
+          <div className="relative w-full h-full overflow-hidden">
+            {/* Background Image Layer */}
+            {(posterSettings.customBackgroundUri || templateDef?.backgroundUri) && (
+              <img 
+                src={posterSettings.customBackgroundUri || templateDef?.backgroundUri || ''} 
+                alt="Background"
+                crossOrigin={(posterSettings.customBackgroundUri || templateDef?.backgroundUri)?.startsWith('http') ? "anonymous" : undefined}
+                className="absolute inset-0 w-full h-full object-cover z-0 pointer-events-none"
+              />
+            )}
+            
             {/* The Slots */}
             {templateDef?.slotsCoordinates?.map((defaultCoord, i) => {
               // Apply overrides if this is the first slot (we only support adjusting slot 0 for now)
@@ -854,10 +864,14 @@ export const PosterCanvas: React.FC<PosterCanvasProps> = ({
             })}
             
             {/* The Overlay */}
-            <div 
-              className="absolute inset-0 z-20 bg-no-repeat bg-contain bg-center pointer-events-none" 
-              style={{ backgroundImage: `url(${posterSettings.customOverlayUri || templateDef?.overlayUri || ''})` }} 
-            />
+            {(posterSettings.customOverlayUri || templateDef?.overlayUri) && (
+              <img 
+                src={posterSettings.customOverlayUri || templateDef?.overlayUri || ''}
+                alt="Overlay"
+                crossOrigin={(posterSettings.customOverlayUri || templateDef?.overlayUri)?.startsWith('http') ? "anonymous" : undefined}
+                className="absolute inset-0 w-full h-full object-contain z-20 pointer-events-none"
+              />
+            )}
           </div>
         )}
 
