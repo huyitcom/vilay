@@ -15,6 +15,7 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { SavedProject } from '../types';
+import { imageOptimizer } from '../utils/imageOptimizer';
 import {
   getAllProjects,
   deleteProject,
@@ -331,16 +332,23 @@ export const ProjectManagerModal: React.FC<ProjectManagerModalProps> = ({
                     <div className="p-4 flex gap-3.5">
                       {/* Thumbnail */}
                       <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-xl bg-stone-100 border border-stone-200 overflow-hidden shrink-0 flex items-center justify-center relative">
-                        {proj.thumbnail ? (
-                          <img
-                            src={proj.thumbnail}
-                            alt={proj.name}
-                            className="w-full h-full object-cover"
-                            referrerPolicy="no-referrer"
-                          />
-                        ) : (
-                          <BookOpen className="w-8 h-8 text-stone-300" />
-                        )}
+                        {(() => {
+                          let thumbSrc = proj.thumbnail;
+                          if (thumbSrc && thumbSrc.startsWith('img_')) {
+                            const opt = imageOptimizer.getImage(thumbSrc);
+                            thumbSrc = opt ? (opt.thumbnailUrl || opt.previewUrl || opt.originalUrl) : null;
+                          }
+                          return thumbSrc ? (
+                            <img
+                              src={thumbSrc}
+                              alt={proj.name}
+                              className="w-full h-full object-cover"
+                              referrerPolicy="no-referrer"
+                            />
+                          ) : (
+                            <BookOpen className="w-8 h-8 text-stone-300" />
+                          );
+                        })()}
                         <span className="absolute bottom-1 right-1 bg-stone-900/80 backdrop-blur-xs text-white text-[10px] font-bold px-1.5 py-0.5 rounded-md">
                           {proj.pageCount}P
                         </span>

@@ -3,7 +3,7 @@ import { imageOptimizer } from '../utils/imageOptimizer';
 import { FrameSlot, PosterSettings, TemplateId, TextConfig, CustomTextElement } from '../types';
 import { PHOTO_FILTERS, TEMPLATES } from '../data/constants';
 import { TEXT_STYLE_PRESETS } from '../data/textStyles';
-import { Upload, Sliders, Plus, Trash2, RotateCw, RotateCcw, Type, Check } from 'lucide-react';
+import { Upload, Sliders, Plus, Trash2, RotateCw, RotateCcw, Type, Check, ImageOff } from 'lucide-react';
 
 interface PosterCanvasProps {
   templateId: TemplateId;
@@ -410,11 +410,28 @@ export const PosterCanvas: React.FC<PosterCanvasProps> = ({
 
         {isFilled ? (() => {
           let finalSrc = slot.imageUri!;
+          let isMissing = false;
           if (finalSrc.startsWith('img_')) {
             const optimized = imageOptimizer.getImage(finalSrc);
             if (optimized) {
               finalSrc = isExporting ? optimized.originalUrl : optimized.previewUrl;
+            } else {
+              isMissing = true;
             }
+          }
+
+          if (isMissing) {
+            return (
+              <div className="w-full h-full flex flex-col items-center justify-center bg-stone-100/95 text-stone-500 p-2 text-center border-2 border-dashed border-stone-300 pointer-events-auto select-none">
+                <div className="w-8 h-8 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center mb-1.5 shadow-2xs">
+                  <ImageOff className="w-4 h-4" />
+                </div>
+                <span className="text-xs font-semibold text-stone-700">Khung #{index + 1}: Chưa có ảnh</span>
+                <span className="text-[10px] text-stone-400 mt-0.5 max-w-[130px] leading-tight">
+                  Kéo ảnh từ thư viện vào đây
+                </span>
+              </div>
+            );
           }
 
           return (

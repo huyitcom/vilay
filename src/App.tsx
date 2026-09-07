@@ -34,6 +34,8 @@ import {
   buildSavedProject,
   exportProjectFile,
 } from './utils/projectStorage';
+import { imageOptimizer } from './utils/imageOptimizer';
+import { AlertCircle, Sparkles, X } from 'lucide-react';
 
 import { ProcessingToast } from './components/ProcessingToast';
 import { toJpeg, getFontEmbedCSS } from 'html-to-image';
@@ -75,6 +77,69 @@ export default function App() {
   };
 
   const posterRef = useRef<HTMLDivElement>(null);
+
+  // Missing images tracking and Smart Relink
+  const [missingImagesCount, setMissingImagesCount] = useState(0);
+  const [libraryImagesCount, setLibraryImagesCount] = useState(0);
+  const [isRelinkDismissed, setIsRelinkDismissed] = useState(false);
+
+  useEffect(() => {
+    const updateStats = () => {
+      const allImgs = imageOptimizer.getImages();
+      setLibraryImagesCount(allImgs.length);
+
+      let missing = 0;
+      pages.forEach((page) => {
+        page.slots.forEach((slot) => {
+          if (
+            slot.imageUri &&
+            slot.imageUri.startsWith('img_') &&
+            !imageOptimizer.getImage(slot.imageUri)
+          ) {
+            missing++;
+          }
+        });
+      });
+      setMissingImagesCount(missing);
+    };
+
+    updateStats();
+    const unsub = imageOptimizer.subscribe(updateStats);
+    return unsub;
+  }, [pages]);
+
+  const handleSmartRelinkPhotos = () => {
+    const readyImages = imageOptimizer.getImages().map((img) => img.id);
+    if (readyImages.length === 0) {
+      showAlert('Vui lòng tải ảnh vào Thư viện trước khi kết nối lại.', 'error');
+      return;
+    }
+
+    let relinkedCount = 0;
+    let imgIdx = 0;
+
+    setPages((prevPages) =>
+      prevPages.map((page) => ({
+        ...page,
+        slots: page.slots.map((slot) => {
+          if (
+            slot.imageUri &&
+            slot.imageUri.startsWith('img_') &&
+            !imageOptimizer.getImage(slot.imageUri)
+          ) {
+            if (imgIdx < readyImages.length) {
+              const newUri = readyImages[imgIdx++];
+              relinkedCount++;
+              return { ...slot, imageUri: newUri };
+            }
+          }
+          return slot;
+        }),
+      }))
+    );
+
+    showAlert(`Đã tự động kết nối ${relinkedCount} ảnh vào các khung bị thiếu!`, 'success');
+  };
 
   // Sync active page bounds
   useEffect(() => {
@@ -314,13 +379,18 @@ export default function App() {
   };
 
   // Batch Apply Uploaded Photos to current page (or across pages if many)
-    const handleApplyBatchPhotos = (images: string[]) => {
+  const handleApplyBatchPhotos = (images: string[]) => {
     setPages((prevPages) => {
       let imageIndex = 0;
       return prevPages.map((page) => {
         const updatedSlots = page.slots.map((slot) => {
-          // If the slot is empty and we still have images to place
-          if (imageIndex < images.length && (!slot.imageUri || slot.imageUri.includes('unsplash.com'))) {
+          const isSlotEmptyOrMissing =
+            !slot.imageUri ||
+            slot.imageUri.includes('unsplash.com') ||
+            (slot.imageUri.startsWith('img_') && !imageOptimizer.getImage(slot.imageUri));
+
+          // If the slot is empty/missing and we still have images to place
+          if (imageIndex < images.length && isSlotEmptyOrMissing) {
             const newSlot = {
               ...slot,
               imageUri: images[imageIndex],
@@ -651,6 +721,7 @@ export default function App() {
     setSelectedTextId(null);
     setActiveSlotIndex(null);
     setIsProjectManagerOpen(false);
+    setIsRelinkDismissed(false);
   };
 
   const handleNewProject = () => {
@@ -724,6 +795,48 @@ export default function App() {
           {/* Top Info Banner for current page */}
           <div className="w-full flex-1 p-4 sm:p-6 flex flex-col items-center justify-center">
             <div className="w-full max-w-7xl 2xl:max-w-[90%] flex flex-col items-center">
+              {/* Missing Images Auto-Relink Banner */}
+              {missingImagesCount > 0 && !isRelinkDismissed && (
+                <div className="w-full max-w-4xl mb-4 p-3.5 bg-amber-50 border border-amber-300 rounded-2xl shadow-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-amber-950 animate-in fade-in">
+                  <div className="flex items-start sm:items-center gap-3 min-w-0">
+                    <div className="p-2 bg-amber-200/80 text-amber-900 rounded-xl shrink-0 mt-0.5 sm:mt-0 shadow-2xs">
+                      <AlertCircle className="w-5 h-5" />
+                    </div>
+                    <div className="text-xs">
+                      <p className="font-bold text-amber-950 text-[13px]">
+                        Phát hiện {missingImagesCount} khung ảnh chưa có dữ liệu ảnh (từ file .xalbum cũ).
+                      </p>
+                      <p className="text-amber-800 mt-0.5">
+                        {libraryImagesCount > 0
+                          ? `Thư viện hiện có ${libraryImagesCount} ảnh. Nhấp nút bên dưới để tự động kết nối ảnh vào khung mà không cần xếp lại từng trang!`
+                          : `Vui lòng tải ảnh vào Thư viện ảnh ở thanh bên phải, sau đó bấm Tự động nối ảnh để phục hồi.`}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 self-end sm:self-center shrink-0">
+                    {libraryImagesCount > 0 && (
+                      <button
+                        type="button"
+                        onClick={handleSmartRelinkPhotos}
+                        className="px-3.5 py-2 bg-amber-600 hover:bg-amber-700 active:bg-amber-800 text-white rounded-xl text-xs font-bold shadow-xs flex items-center gap-1.5 transition cursor-pointer"
+                      >
+                        <Sparkles className="w-3.5 h-3.5" />
+                        Tự động nối {Math.min(missingImagesCount, libraryImagesCount)} ảnh
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => setIsRelinkDismissed(true)}
+                      className="p-1.5 text-amber-700 hover:text-amber-950 hover:bg-amber-200/60 rounded-lg transition cursor-pointer"
+                      title="Đóng thông báo"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              )}
+
               <PosterCanvas
                 isExporting={isExporting}
                 templateId={currentPage.templateId}
@@ -791,8 +904,20 @@ export default function App() {
           posterSettings={currentPage.posterSettings}
           onChangePosterSettings={handlePosterSettingsChange}
           onAutoFill={handleApplyBatchPhotos}
-          totalEmptySlotsCount={pages.reduce((acc, page) => acc + page.slots.filter(s => !s.imageUri || s.imageUri.includes('unsplash.com')).length, 0)}
-          usedImageIds={pages.flatMap(p => p.slots).map(s => s.imageUri).filter(Boolean) as string[]}
+          totalEmptySlotsCount={pages.reduce(
+            (acc, page) =>
+              acc +
+              page.slots.filter(
+                (s) =>
+                  !s.imageUri ||
+                  s.imageUri.includes('unsplash.com') ||
+                  (s.imageUri.startsWith('img_') && !imageOptimizer.getImage(s.imageUri))
+              ).length,
+            0
+          )}
+          usedImageIds={pages.flatMap((p) => p.slots).map((s) => s.imageUri).filter(Boolean) as string[]}
+          missingImagesCount={missingImagesCount}
+          onSmartRelink={handleSmartRelinkPhotos}
         />
       </div>
 

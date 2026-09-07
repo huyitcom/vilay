@@ -1,35 +1,8 @@
 import { SavedProject, AlbumPage } from '../types';
+import { openDB, STORE_PROJECTS } from './db';
+import { imageOptimizer } from './imageOptimizer';
 
-const DB_NAME = 'xalbum_database';
-const DB_VERSION = 1;
-const STORE_NAME = 'projects';
 const LOCAL_STORAGE_KEY = 'xalbum_saved_projects';
-
-// Helper to open IndexedDB
-function openDB(): Promise<IDBDatabase> {
-  return new Promise((resolve, reject) => {
-    if (typeof window === 'undefined' || !window.indexedDB) {
-      return reject(new Error('IndexedDB not supported'));
-    }
-
-    const request = window.indexedDB.open(DB_NAME, DB_VERSION);
-
-    request.onupgradeneeded = (event) => {
-      const db = (event.target as IDBOpenDBRequest).result;
-      if (!db.objectStoreNames.contains(STORE_NAME)) {
-        db.createObjectStore(STORE_NAME, { keyPath: 'id' });
-      }
-    };
-
-    request.onsuccess = (event) => {
-      resolve((event.target as IDBOpenDBRequest).result);
-    };
-
-    request.onerror = (event) => {
-      reject((event.target as IDBOpenDBRequest).error);
-    };
-  });
-}
 
 // Fallback LocalStorage methods
 function getLocalStorageProjects(): SavedProject[] {
@@ -90,8 +63,8 @@ export async function getAllProjects(): Promise<SavedProject[]> {
   try {
     const db = await openDB();
     return new Promise((resolve, reject) => {
-      const tx = db.transaction(STORE_NAME, 'readonly');
-      const store = tx.objectStore(STORE_NAME);
+      const tx = db.transaction(STORE_PROJECTS, 'readonly');
+      const store = tx.objectStore(STORE_PROJECTS);
       const req = store.getAll();
 
       req.onsuccess = () => {
@@ -115,8 +88,8 @@ export async function getProject(id: string): Promise<SavedProject | null> {
   try {
     const db = await openDB();
     return new Promise((resolve, reject) => {
-      const tx = db.transaction(STORE_NAME, 'readonly');
-      const store = tx.objectStore(STORE_NAME);
+      const tx = db.transaction(STORE_PROJECTS, 'readonly');
+      const store = tx.objectStore(STORE_PROJECTS);
       const req = store.get(id);
 
       req.onsuccess = () => resolve(req.result || null);
@@ -132,8 +105,8 @@ export async function saveProject(project: SavedProject): Promise<void> {
   try {
     const db = await openDB();
     return new Promise((resolve, reject) => {
-      const tx = db.transaction(STORE_NAME, 'readwrite');
-      const store = tx.objectStore(STORE_NAME);
+      const tx = db.transaction(STORE_PROJECTS, 'readwrite');
+      const store = tx.objectStore(STORE_PROJECTS);
       const req = store.put(project);
 
       req.onsuccess = () => resolve();
@@ -156,17 +129,18 @@ export async function deleteProject(id: string): Promise<void> {
   try {
     const db = await openDB();
     return new Promise((resolve, reject) => {
-      const tx = db.transaction(STORE_NAME, 'readwrite');
-      const store = tx.objectStore(STORE_NAME);
+      const tx = db.transaction(STORE_PROJECTS, 'readwrite');
+      const store = tx.objectStore(STORE_PROJECTS);
       const req = store.delete(id);
 
       req.onsuccess = () => resolve();
       req.onerror = () => reject(req.error);
     });
   } catch (err) {
+    console.warn('IndexedDB delete failed, falling back to localStorage:', err);
     const list = getLocalStorageProjects();
-    const updated = list.filter((p) => p.id !== id);
-    saveLocalStorageProjects(updated);
+    const filtered = list.filter((p) => p.id !== id);
+    saveLocalStorageProjects(filtered);
   }
 }
 
@@ -175,6 +149,10 @@ export function extractProjectThumbnail(pages: AlbumPage[]): string | null {
   for (const page of pages) {
     const filledSlot = page.slots.find((s) => s.imageUri && s.imageUri.length > 0);
     if (filledSlot && filledSlot.imageUri) {
+      if (filledSlot.imageUri.startsWith('img_')) {
+        const opt = imageOptimizer.getImage(filledSlot.imageUri);
+        if (opt) return opt.thumbnailUrl || opt.previewUrl || opt.originalUrl;
+      }
       return filledSlot.imageUri;
     }
   }
@@ -207,13 +185,36 @@ export function buildSavedProject(
   };
 }
 
-// Export project to a downloadable .xalbum (JSON) file
+// Export project to a downloadable .xalbum (JSON) file including embedded image data
 export function exportProjectFile(project: SavedProject): void {
+  // Collect all image IDs referenced in project pages
+  const referencedImageIds = new Set<string>();
+  project.pages.forEach((p) => {
+    p.slots.forEach((s) => {
+      if (s.imageUri && s.imageUri.startsWith('img_')) {
+        referencedImageIds.add(s.imageUri);
+      }
+    });
+  });
+
+  // Get all images from library/registry
+  const allImages = imageOptimizer.getImages();
+  // Include all images that are either referenced in slots or uploaded into the library
+  const imagesToExport = allImages.map((img) => ({
+    id: img.id,
+    originalUrl: img.originalUrl,
+    previewUrl: img.previewUrl,
+    thumbnailUrl: img.thumbnailUrl,
+    status: 'ready' as const,
+    progress: 100,
+  }));
+
   const exportData = {
     app: 'xAlbum',
-    version: '1.0',
+    version: '2.0',
     exportedAt: new Date().toISOString(),
     project,
+    images: imagesToExport,
   };
 
   const jsonStr = JSON.stringify(exportData, null, 2);
@@ -223,7 +224,7 @@ export function exportProjectFile(project: SavedProject): void {
   const safeName = (project.name || 'xalbum_project')
     .replace(/[\\/:*?"<>|]/g, '_')
     .trim();
-  
+
   const a = document.createElement('a');
   a.href = url;
   a.download = `${safeName}.xalbum`;
@@ -250,6 +251,11 @@ export async function importProjectFile(file: File): Promise<SavedProject> {
 
         if (!projectData.pages || !Array.isArray(projectData.pages) || projectData.pages.length === 0) {
           throw new Error('Định dạng file không hợp lệ: Không tìm thấy dữ liệu trang album.');
+        }
+
+        // Restore images if available in export file
+        if (Array.isArray(data.images) && data.images.length > 0) {
+          await imageOptimizer.restoreImages(data.images);
         }
 
         // Generate a fresh unique ID for imported project so it doesn't conflict

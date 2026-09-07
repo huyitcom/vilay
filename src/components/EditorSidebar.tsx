@@ -20,6 +20,7 @@ import {
   UploadCloud,
   Trash2,
   CopyCheck,
+  Sparkles,
 } from 'lucide-react';
 import { imageOptimizer, OptimizedImage } from '../utils/imageOptimizer';
 import { useEffect } from 'react';
@@ -41,6 +42,8 @@ interface EditorSidebarProps {
   onAutoFill?: (imageIds: string[]) => void;
   totalEmptySlotsCount?: number;
   usedImageIds?: string[];
+  missingImagesCount?: number;
+  onSmartRelink?: () => void;
 }
 
 
@@ -51,7 +54,11 @@ export const ThumbnailSlot: React.FC<{ slot?: import('../types').FrameSlot; plac
   let finalSrc = imageUri;
   if (finalSrc.startsWith('img_')) {
     const optimized = imageOptimizer.getImage(finalSrc);
-    if (optimized) finalSrc = optimized.thumbnailUrl || optimized.previewUrl;
+    if (optimized) {
+      finalSrc = optimized.thumbnailUrl || optimized.previewUrl;
+    } else {
+      return <>{placeholder || <div className="absolute inset-0 bg-stone-200 flex items-center justify-center text-stone-400 text-[8px]" />}</>;
+    }
   }
   return (
     <img src={finalSrc} className={`absolute inset-0 w-full h-full object-cover rounded-[2px] ${className}`} />
@@ -641,6 +648,8 @@ export const EditorSidebar: React.FC<EditorSidebarProps> = ({
   onAutoFill,
   totalEmptySlotsCount = 0,
   usedImageIds = [],
+  missingImagesCount = 0,
+  onSmartRelink,
 }) => {
   const [activeTab, setActiveTab] = useState<'images' | 'layouts' | 'style'>('images');
   const [layoutCategory, setLayoutCategory] = useState<'basic' | 'with-text' | 'vip'>('vip');
@@ -907,6 +916,17 @@ export const EditorSidebar: React.FC<EditorSidebarProps> = ({
                 <UploadCloud className="w-5 h-5 group-hover:scale-110 transition-transform" />
                 <span className="text-xs font-bold uppercase tracking-wider">Tải ảnh lên</span>
               </button>
+
+              {missingImagesCount > 0 && onSmartRelink && (
+                <button
+                  type="button"
+                  onClick={onSmartRelink}
+                  className="w-full mt-2 py-2 px-3 bg-amber-500 hover:bg-amber-600 active:bg-amber-700 text-white rounded-xl text-xs font-bold shadow-xs flex items-center justify-center gap-1.5 transition cursor-pointer animate-in fade-in"
+                >
+                  <Sparkles className="w-3.5 h-3.5" />
+                  <span>Nối lại {missingImagesCount} ảnh vào khung</span>
+                </button>
+              )}
             </div>
 
             

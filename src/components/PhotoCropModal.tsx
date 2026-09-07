@@ -1,6 +1,7 @@
 import React from 'react';
 import { FrameSlot } from '../types';
 import { PHOTO_FILTERS } from '../data/constants';
+import { imageOptimizer } from '../utils/imageOptimizer';
 import { X, ZoomIn, ZoomOut, RotateCw, Trash2, Sliders, Check } from 'lucide-react';
 
 interface PhotoCropModalProps {
@@ -23,6 +24,12 @@ export const PhotoCropModal: React.FC<PhotoCropModalProps> = ({
   const currentFilter = PHOTO_FILTERS.find((f) => f.id === slot.filter) || PHOTO_FILTERS[0];
   const posX = Math.max(0, Math.min(100, 50 + (slot.offsetX || 0)));
   const posY = Math.max(0, Math.min(100, 50 + (slot.offsetY || 0)));
+
+  let displaySrc = slot.imageUri;
+  if (displaySrc.startsWith('img_')) {
+    const opt = imageOptimizer.getImage(displaySrc);
+    if (opt) displaySrc = opt.originalUrl || opt.previewUrl;
+  }
 
   const handleZoomChange = (newZoom: number) => {
     const zoom = Math.min(Math.max(newZoom, 1), 3);
@@ -68,7 +75,7 @@ export const PhotoCropModal: React.FC<PhotoCropModalProps> = ({
             <div className="flex flex-col items-center">
               <div className="relative w-full max-w-[280px] sm:max-w-none aspect-[3/4] bg-stone-900 rounded-xl overflow-hidden shadow-inner flex items-center justify-center group border border-stone-200">
                 <img
-                  src={slot.imageUri}
+                  src={displaySrc}
                   alt={`Slot ${slotIndex + 1}`}
                   className="w-full h-full object-cover transition-transform duration-100"
                   style={{
