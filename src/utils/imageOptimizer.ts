@@ -48,7 +48,14 @@ class ImageOptimizerService {
       if (!file.type.startsWith('image/')) continue;
       
       const id = 'img_' + Math.random().toString(36).substring(2, 11);
-      const originalUrl = URL.createObjectURL(file);
+      
+      // Read original as data URL for safe html-to-image embedding
+      const originalUrl = await new Promise<string>((resolve) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result as string);
+        reader.onerror = () => resolve(URL.createObjectURL(file));
+        reader.readAsDataURL(file);
+      });
       
       this.registry.set(id, {
         id,
@@ -146,9 +153,15 @@ class ImageOptimizerService {
         canvas.toBlob(
           (blob) => {
             if (blob) {
-              resolve(URL.createObjectURL(blob));
+              const reader = new FileReader();
+              reader.onloadend = () => resolve(reader.result as string);
+              reader.onerror = () => resolve(URL.createObjectURL(file)); // fallback
+              reader.readAsDataURL(blob);
             } else {
-              resolve(URL.createObjectURL(file));
+              const reader = new FileReader();
+              reader.onloadend = () => resolve(reader.result as string);
+              reader.onerror = () => resolve(URL.createObjectURL(file)); // fallback
+              reader.readAsDataURL(file);
             }
           },
           'image/jpeg',

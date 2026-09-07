@@ -51,23 +51,25 @@ export async function captureCanvasAs300DpiJpeg(
     console.warn('Could not embed external font CSS in canvas capture:', err);
   }
 
+  const transparentPixel = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
+
   let rawDataUrl: string;
   try {
     rawDataUrl = await toJpeg(element, {
       pixelRatio,
       quality: 0.92,
       backgroundColor: bgColor || '#ffffff',
-      cacheBust: true,
       fontEmbedCSS,
+      imagePlaceholder: transparentPixel,
     });
   } catch (err) {
-    console.warn('First toJpeg attempt failed, trying again without fontEmbedCSS and cacheBust...', err);
+    console.warn('First toJpeg attempt failed, trying again without fontEmbedCSS...', err);
     try {
       rawDataUrl = await toJpeg(element, {
         pixelRatio,
         quality: 0.92,
         backgroundColor: bgColor || '#ffffff',
-        cacheBust: false,
+        imagePlaceholder: transparentPixel,
       });
     } catch (finalErr: any) {
       console.error('Final toJpeg attempt failed:', finalErr);
