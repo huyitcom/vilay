@@ -647,7 +647,9 @@ export const EditorSidebar: React.FC<EditorSidebarProps> = ({
   const [isDraggingOverLibrary, setIsDraggingOverLibrary] = useState(false);
   const [libraryImages, setLibraryImages] = useState<OptimizedImage[]>(() => imageOptimizer.getImages());
   const [imageColumns, setImageColumns] = useState<number>(2);
+  const [imageFilter, setImageFilter] = useState<'all' | 'used' | 'unused'>('all');
   const [showAutoFillModal, setShowAutoFillModal] = useState(false);
+  const [lastUploadedCount, setLastUploadedCount] = useState(0);
   const [pendingUploads, setPendingUploads] = useState(0);
   const [appliedAllNotice, setAppliedAllNotice] = useState(false);
 
@@ -660,14 +662,16 @@ export const EditorSidebar: React.FC<EditorSidebarProps> = ({
   };
 
   const processingCount = libraryImages.filter(img => img.status === 'processing').length;
+  const isAddingImages = imageOptimizer.isAdding;
   useEffect(() => {
-    if (pendingUploads > 0 && processingCount === 0) {
+    if (pendingUploads > 0 && processingCount === 0 && !isAddingImages) {
       if (totalEmptySlotsCount > 0) {
+        setLastUploadedCount(pendingUploads);
         setShowAutoFillModal(true);
       }
       setPendingUploads(0);
     }
-  }, [processingCount, pendingUploads, totalEmptySlotsCount]);
+  }, [processingCount, pendingUploads, totalEmptySlotsCount, isAddingImages]);
 
   useEffect(() => {
     const unsubscribe = imageOptimizer.subscribe(() => {
@@ -909,20 +913,36 @@ export const EditorSidebar: React.FC<EditorSidebarProps> = ({
             {/* Column Selector */}
 
             {libraryImages.length > 0 && (
-              <div className="flex items-center justify-between mb-3 flex-none">
-                <span className="text-[10px] text-stone-500 font-bold uppercase tracking-wider">Cột hiển thị:</span>
-                <div className="flex bg-stone-100 rounded-lg p-0.5">
-                  {[2, 3, 4].map((col) => (
-                    <button
-                      key={col}
-                      onClick={() => setImageColumns(col)}
-                      className={`px-3 py-1 text-xs font-semibold rounded-md transition-colors ${
-                        imageColumns === col ? 'bg-white shadow-sm text-sky-600' : 'text-stone-500 hover:text-stone-700'
-                      }`}
+              <div className="flex flex-col gap-2 mb-3 flex-none">
+                <div className="flex items-center justify-between">
+                  <div className="flex gap-1">
+                    <select 
+                      value={imageFilter}
+                      onChange={(e) => setImageFilter(e.target.value as any)}
+                      className="text-[11px] font-semibold text-stone-600 bg-stone-100 border-none rounded-md px-2 py-1 outline-none focus:ring-1 focus:ring-sky-500 cursor-pointer"
                     >
-                      {col}
-                    </button>
-                  ))}
+                      <option value="all">Tất cả ảnh</option>
+                      <option value="unused">Chưa dùng</option>
+                      <option value="used">Đã dùng</option>
+                    </select>
+                  </div>
+                  
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] text-stone-500 font-bold uppercase tracking-wider hidden sm:inline-block">Cột:</span>
+                    <div className="flex bg-stone-100 rounded-lg p-0.5">
+                      {[2, 3, 4].map((col) => (
+                        <button
+                          key={col}
+                          onClick={() => setImageColumns(col)}
+                          className={`px-2 py-0.5 text-xs font-semibold rounded-md transition-colors ${
+                            imageColumns === col ? 'bg-white shadow-sm text-sky-600' : 'text-stone-500 hover:text-stone-700'
+                          }`}
+                        >
+                          {col}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                 </div>
               </div>
             )}
@@ -936,11 +956,29 @@ export const EditorSidebar: React.FC<EditorSidebarProps> = ({
                   <p className="text-[10px] opacity-70">Tải ảnh lên để bắt đầu thiết kế</p>
                 </div>
               ) : (
-                <div style={{ columnCount: imageColumns, columnGap: '8px' }}>
-                  {libraryImages.map((img) => {
+                (() => {
+                  const filteredImages = libraryImages.filter(img => {
                     const isUsed = usedImageIds.includes(img.id);
+                    if (imageFilter === 'used') return isUsed;
+                    if (imageFilter === 'unused') return !isUsed;
+                    return true;
+                  });
+
+                  if (filteredImages.length === 0) {
                     return (
-                    <div
+                      <div className="py-8 flex flex-col items-center justify-center text-stone-400 text-center bg-stone-50 rounded-xl border border-stone-100 mt-2">
+                        <ImageIcon className="w-8 h-8 mb-2 opacity-20" />
+                        <p className="text-[11px]">Không có ảnh nào phù hợp.</p>
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div style={{ columnCount: imageColumns, columnGap: '8px' }}>
+                      {filteredImages.map((img) => {
+                        const isUsed = usedImageIds.includes(img.id);
+                        return (
+                        <div
                       key={img.id}
                       draggable
                       onDragStart={(e) => {
@@ -973,7 +1011,9 @@ export const EditorSidebar: React.FC<EditorSidebarProps> = ({
                       </button>
                     </div>
                   )})}
-                </div>
+                    </div>
+                  );
+                })()
               )}
             </div>
           </div>
@@ -1285,13 +1325,14 @@ export const EditorSidebar: React.FC<EditorSidebarProps> = ({
             </div>
             <h3 className="font-bold text-stone-800 text-xl mb-2">Đã tải ảnh xong!</h3>
             <p className="text-sm text-stone-600 mb-6">
-              Bạn có muốn tự động rải <span className="font-bold text-sky-600">{libraryImages.length} ảnh</span> này vào 
+              Bạn có muốn tự động rải <span className="font-bold text-sky-600">{lastUploadedCount} ảnh</span> này vào 
               <span className="font-bold text-sky-600"> {totalEmptySlotsCount} khung hình trống</span> trên Album không?
             </p>
             <div className="flex flex-col gap-2">
               <button
                 onClick={() => {
-                  onAutoFill(libraryImages.map(img => img.id));
+                  const unusedImages = libraryImages.filter(img => !usedImageIds.includes(img.id));
+                  onAutoFill(unusedImages.length > 0 ? unusedImages.map(img => img.id) : libraryImages.map(img => img.id));
                   setShowAutoFillModal(false);
                 }}
                 className="w-full py-3 bg-gradient-to-r from-sky-500 to-indigo-500 hover:from-sky-600 hover:to-indigo-600 text-white rounded-xl shadow-sm hover:shadow-md font-bold transition-all"

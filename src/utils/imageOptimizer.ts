@@ -14,6 +14,7 @@ class ImageOptimizerService {
   private queue: { id: string; file: File }[] = [];
   private isProcessing = false;
   private subscribers = new Set<Subscriber>();
+  public isAdding = false;
 
   subscribe(callback: Subscriber) {
     this.subscribers.add(callback);
@@ -44,6 +45,9 @@ class ImageOptimizerService {
   }
 
   async addImages(files: File[]) {
+    this.isAdding = true;
+    this.notify();
+
     for (const file of files) {
       if (!file.type.startsWith('image/')) continue;
       
@@ -67,7 +71,9 @@ class ImageOptimizerService {
       });
       
       this.queue.push({ id, file });
+      this.notify(); // Notify incrementally so UI updates progress
     }
+    this.isAdding = false;
     this.notify();
     this.processQueue();
   }
